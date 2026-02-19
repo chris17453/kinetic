@@ -1,0 +1,17 @@
+{
+  "name": "@kinetic/embed",
+  "version": "1.0.0",
+  "description": "Kinetic Report Embedding Widget",
+  "main": "dist/kinetic-embed.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --minify --outfile=dist/kinetic-embed.js --format=iife --global-name=Kinetic",
+    "build:dev": "esbuild src/index.ts --bundle --outfile=dist/kinetic-embed.js --format=iife --global-name=Kinetic --sourcemap",
+    "watch": "esbuild src/index.ts --bundle --outfile=dist/kinetic-embed.js --format=iife --global-name=Kinetic --sourcemap --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

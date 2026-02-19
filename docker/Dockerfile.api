@@ -1,0 +1,51 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+WORKDIR /src
+
+# Copy solution and project files
+COPY Kinetic.slnx .
+COPY src/Kinetic.Core/Kinetic.Core.csproj src/Kinetic.Core/
+COPY src/Kinetic.Data/Kinetic.Data.csproj src/Kinetic.Data/
+COPY src/Kinetic.Identity/Kinetic.Identity.csproj src/Kinetic.Identity/
+COPY src/Kinetic.Adapters/Kinetic.Adapters.csproj src/Kinetic.Adapters/
+COPY src/Kinetic.Ingest/Kinetic.Ingest.csproj src/Kinetic.Ingest/
+COPY src/Kinetic.Queue/Kinetic.Queue.csproj src/Kinetic.Queue/
+COPY src/Kinetic.Store/Kinetic.Store.csproj src/Kinetic.Store/
+COPY src/Kinetic.Api/Kinetic.Api.csproj src/Kinetic.Api/
+
+# Restore packages
+RUN dotnet restore src/Kinetic.Api/Kinetic.Api.csproj
+
+# Copy all source code
+COPY src/ src/
+
+# Build and publish
+RUN dotnet publish src/Kinetic.Api/Kinetic.Api.csproj -c Release -o /app/publish --no-restore
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app
+
+# Install ICU for globalization
+RUN apk add --no-cache icu-libs
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+# Create non-root user
+RUN addgroup -S kinetic && adduser -S kinetic -G kinetic
+USER kinetic
+
+# Copy published app
+COPY --from=build /app/publish .
+
+# Create logs directory
+RUN mkdir -p logs
+
+# Expose ports
+EXPOSE 8080
+EXPOSE 9999
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "Kinetic.Api.dll"]

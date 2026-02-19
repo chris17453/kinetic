@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Kinetic.Adapters/Kinetic.Adapters.csproj" />
+    <Project Path="src/Kinetic.Api/Kinetic.Api.csproj" />
+    <Project Path="src/Kinetic.Core/Kinetic.Core.csproj" />
+    <Project Path="src/Kinetic.Data/Kinetic.Data.csproj" />
+    <Project Path="src/Kinetic.Identity/Kinetic.Identity.csproj" />
+    <Project Path="src/Kinetic.Ingest/Kinetic.Ingest.csproj" />
+    <Project Path="src/Kinetic.Queue/Kinetic.Queue.csproj" />
+    <Project Path="src/Kinetic.Store/Kinetic.Store.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kinetic.Adapters.Tests/Kinetic.Adapters.Tests.csproj" />
+    <Project Path="tests/Kinetic.Api.Tests/Kinetic.Api.Tests.csproj" />
+    <Project Path="tests/Kinetic.Core.Tests/Kinetic.Core.Tests.csproj" />
+  </Folder>
+</Solution>

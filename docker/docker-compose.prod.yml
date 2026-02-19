@@ -1,0 +1,98 @@
+# Kinetic Production Docker Compose
+# Use this for self-hosted production deployments
+
+services:
+  # API Server
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    image: kinetic/api:latest
+    ports:
+      - "8080:8080"
+      - "9999:9999"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=${MSSQL_CONNECTION_STRING}
+      - Redis__ConnectionString=${REDIS_CONNECTION_STRING}
+      - Jwt__Secret=${JWT_SECRET}
+      - Jwt__Issuer=${JWT_ISSUER:-kinetic}
+      - Jwt__Audience=${JWT_AUDIENCE:-kinetic-users}
+      - EntraId__TenantId=${ENTRA_TENANT_ID}
+      - EntraId__ClientId=${ENTRA_CLIENT_ID}
+      - EntraId__ClientSecret=${ENTRA_CLIENT_SECRET}
+      - Encryption__Key=${ENCRYPTION_KEY}
+      - TempCache__SchemaName=kinetic_cache
+      - ScheduledJobs__EnableEntraSync=${ENABLE_ENTRA_SYNC:-false}
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend
+  ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ui
+    image: kinetic/ui:latest
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Microsoft SQL Server
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-KineticDev123!}
+      - MSSQL_PID=Express
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: unless-stopped
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mssql_data:
+  redis_data:
+
+networks:
+  default:
+    name: kinetic-network

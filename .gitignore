@@ -1,0 +1,62 @@
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+project.lock.json
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# Node / npm
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Build output
+out/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+appsettings.*.json
+!appsettings.Development.json.example
+
+# Logs
+logs/
+*.log
+
+# Terraform / Infra
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Docker
+docker-compose.override.yml
+
+# Coverage
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg

@@ -1,0 +1,156 @@
+services:
+  # =============================================================================
+  # DATABASES
+  # =============================================================================
+  
+  # Primary System Database (MSSQL)
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: kinetic-mssql
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Kinetic@Dev123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - kinetic-mssql-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Kinetic@Dev123!" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - kinetic-network
+
+  # =============================================================================
+  # CACHE & QUEUE
+  # =============================================================================
+  
+  # Redis - Cache + Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: kinetic-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - kinetic-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kinetic-network
+
+  # Redis Commander - Redis UI (dev only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: kinetic-redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - kinetic-network
+    profiles:
+      - dev-tools
+
+  # =============================================================================
+  # SAMPLE/TEST DATABASES (for adapter testing)
+  # =============================================================================
+
+  # PostgreSQL - Sample target database
+  postgres:
+    image: postgres:16-alpine
+    container_name: kinetic-postgres-sample
+    environment:
+      - POSTGRES_USER=kinetic
+      - POSTGRES_PASSWORD=kinetic123
+      - POSTGRES_DB=sample
+    ports:
+      - "5432:5432"
+    volumes:
+      - kinetic-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kinetic -d sample"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kinetic-network
+    profiles:
+      - sample-dbs
+
+  # MySQL - Sample target database  
+  mysql:
+    image: mysql:8.0
+    container_name: kinetic-mysql-sample
+    environment:
+      - MYSQL_ROOT_PASSWORD=kinetic123
+      - MYSQL_DATABASE=sample
+      - MYSQL_USER=kinetic
+      - MYSQL_PASSWORD=kinetic123
+    ports:
+      - "3306:3306"
+    volumes:
+      - kinetic-mysql-data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukinetic", "-pkinetic123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kinetic-network
+    profiles:
+      - sample-dbs
+
+  # =============================================================================
+  # OBSERVABILITY (optional for dev)
+  # =============================================================================
+
+  # Seq - Log aggregation
+  seq:
+    image: datalust/seq:latest
+    container_name: kinetic-seq
+    environment:
+      - ACCEPT_EULA=Y
+    ports:
+      - "5341:5341"   # Ingestion
+      - "8082:80"     # UI
+    volumes:
+      - kinetic-seq-data:/data
+    networks:
+      - kinetic-network
+    profiles:
+      - observability
+
+  # =============================================================================
+  # VOLUMES
+  # =============================================================================
+
+volumes:
+  kinetic-mssql-data:
+    driver: local
+  kinetic-redis-data:
+    driver: local
+  kinetic-postgres-data:
+    driver: local
+  kinetic-mysql-data:
+    driver: local
+  kinetic-seq-data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+
+networks:
+  kinetic-network:
+    driver: bridge
