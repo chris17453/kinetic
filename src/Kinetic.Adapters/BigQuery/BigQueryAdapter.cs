@@ -69,7 +69,7 @@ public class BigQueryAdapter : IDbAdapter
         string connectionString,
         string query,
         Dictionary<string, object?>? parameters = null,
-        QueryOptions? options = null,
+        Kinetic.Adapters.Core.QueryOptions? options = null,
         CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
@@ -93,13 +93,13 @@ public class BigQueryAdapter : IDbAdapter
                 }
             }
             
-            var queryOptions = new QueryOptions
+            var queryOptions = new Google.Cloud.BigQuery.V2.QueryOptions
             {
                 UseQueryCache = true
             };
             
             // Execute query
-            var results = await client.ExecuteQueryAsync(query, bqParameters, queryOptions, ct);
+            var results = await client.ExecuteQueryAsync(query, bqParameters, queryOptions);
             
             // Get schema
             foreach (var field in results.Schema.Fields)

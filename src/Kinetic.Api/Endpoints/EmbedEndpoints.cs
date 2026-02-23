@@ -138,10 +138,18 @@ public static class EmbedEndpoints
 
         try
         {
+            // Use the token creator's ID for audit attribution, not Guid.Empty
+            var auditUserId = embedToken.CreatedByUserId != Guid.Empty
+                ? embedToken.CreatedByUserId
+                : new Guid("00000000-0000-0000-0000-000000000001"); // embed service account
+
             var result = await queryService.ExecuteReportAsync(
                 embedToken.ReportId,
                 parameters,
-                Guid.Empty); // Anonymous user for embed
+                auditUserId,
+                request.Page,
+                request.PageSize,
+                request.IncludeTotalCount ?? false);
 
             return Results.Ok(new ExecuteResultDto
             {
@@ -318,6 +326,7 @@ public record ExecuteEmbedRequest
     public Dictionary<string, object>? Parameters { get; init; }
     public int? Page { get; init; }
     public int? PageSize { get; init; }
+    public bool? IncludeTotalCount { get; init; }
 }
 
 public record ExecuteResultDto

@@ -13,6 +13,7 @@ public static class QueueServiceExtensions
         {
             x.AddConsumer<ExecuteReportConsumer>();
             x.AddConsumer<ScheduledReportConsumer>();
+            x.AddConsumer<TriggerScheduledReportsConsumer>();
             x.AddConsumer<EntraGroupSyncConsumer>();
             x.AddConsumer<AuditCleanupConsumer>();
             x.AddConsumer<TempDataCleanupConsumer>();

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Dark background rounded square matching the logo's black panel -->
+  <rect width="64" height="64" rx="10" fill="#111111"/>
+
+  <!-- Speed lines left of the bolt -->
+  <line x1="5" y1="27" x2="17" y2="27" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+  <line x1="5" y1="32" x2="19" y2="32" stroke="#FCD34D" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>
+  <line x1="5" y1="37" x2="17" y2="37" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- K-bolt lightning mark (stylized forward-pointing K shape) -->
+  <polygon points="46,9 26,29 37,29 18,55 38,35 27,35 46,9"
+    fill="url(#goldGrad)" stroke="#1a1a00" stroke-width="0.8" stroke-linejoin="round"/>
+
+  <defs>
+    <linearGradient id="goldGrad" x1="18" y1="9" x2="46" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FDE68A"/>
+      <stop offset="40%"  stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+  </defs>
+</svg>

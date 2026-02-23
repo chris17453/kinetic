@@ -1,5 +1,13 @@
 namespace Kinetic.Core.Domain.Reports;
 
+public enum ColumnMaskingRule
+{
+    None,        // Show full value
+    Hidden,      // Exclude column from results entirely
+    Masked,      // Replace value with ***
+    Partial,     // Show first N chars, mask rest (e.g. "john****@*****.com")
+}
+
 public class ColumnDefinition
 {
     public Guid Id { get; set; }
@@ -11,6 +19,10 @@ public class ColumnDefinition
 
     // Formatting
     public ColumnFormat Format { get; set; } = new();
+
+    // Masking
+    public ColumnMaskingRule MaskingRule { get; set; } = ColumnMaskingRule.None;
+    public int MaskingPartialChars { get; set; } = 3; // For Partial masking
 }
 
 public class ColumnFormat

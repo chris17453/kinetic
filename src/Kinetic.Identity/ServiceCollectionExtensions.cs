@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Distributed;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
@@ -48,9 +49,38 @@ public static class ServiceCollectionExtensions
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSettings.Issuer,
                 ValidAudience = jwtSettings.Audience,
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+                IssuerSigningKey = GetJwtValidationKey(jwtSettings),
                 ClockSkew = TimeSpan.Zero
+            };
+
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    // Fall back to cookie if no Authorization header
+                    if (string.IsNullOrEmpty(context.Token))
+                    {
+                        context.Token = context.Request.Cookies["kinetic_access_token"];
+                    }
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = async context =>
+                {
+                    var jti = context.Principal?.FindFirst("jti")?.Value;
+                    if (!string.IsNullOrEmpty(jti))
+                    {
+                        var cache = context.HttpContext.RequestServices
+                            .GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
+                        if (cache != null)
+                        {
+                            var revoked = await cache.GetStringAsync($"kinetic:revoked:{jti}");
+                            if (revoked != null)
+                            {
+                                context.Fail("Token has been revoked.");
+                            }
+                        }
+                    }
+                }
             };
         });
 
@@ -87,5 +117,22 @@ public static class ServiceCollectionExtensions
                 policy.RequireClaim("permission", Core.Domain.Identity.Permissions.AdminSystem));
 
         return services;
+    }
+
+    private static SecurityKey GetJwtValidationKey(JwtSettings settings)
+    {
+        if (!string.IsNullOrEmpty(settings.RsaPublicKeyPem))
+        {
+            var rsa = System.Security.Cryptography.RSA.Create();
+            rsa.ImportFromPem(settings.RsaPublicKeyPem);
+            return new RsaSecurityKey(rsa);
+        }
+        if (!string.IsNullOrEmpty(settings.RsaPrivateKeyPem))
+        {
+            var rsa = System.Security.Cryptography.RSA.Create();
+            rsa.ImportFromPem(settings.RsaPrivateKeyPem);
+            return new RsaSecurityKey(rsa);
+        }
+        return new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(settings.Secret));
     }
 }

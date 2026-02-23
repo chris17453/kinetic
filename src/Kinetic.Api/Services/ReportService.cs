@@ -82,6 +82,15 @@ public class ReportService : IReportService
             
             if (filter.ConnectionId.HasValue)
                 query = query.Where(r => r.ConnectionId == filter.ConnectionId);
+            
+            if (!string.IsNullOrWhiteSpace(filter.Q))
+            {
+                var q = filter.Q.ToLower();
+                query = query.Where(r =>
+                    r.Name.ToLower().Contains(q) ||
+                    (r.Description != null && r.Description.ToLower().Contains(q)) ||
+                    r.QueryText.ToLower().Contains(q));
+            }
         }
 
         return await query
@@ -130,7 +139,8 @@ public class ReportService : IReportService
             // Metadata
             CreatedAt = DateTime.UtcNow,
             CreatedById = userId,
-            IsActive = true
+            IsActive = true,
+            RowFilterExpression = request.RowFilterExpression
         };
 
         // Auto-detect columns if query provided and no columns specified
@@ -169,6 +179,11 @@ public class ReportService : IReportService
         if (request.CategoryId.HasValue) report.CategoryId = request.CategoryId.Value;
         if (request.Tags != null) report.Tags = request.Tags;
         if (request.Visibility.HasValue) report.Visibility = request.Visibility.Value;
+        // Allow clearing the row filter by passing an empty string; null means "no change"
+        if (request.RowFilterExpression != null)
+            report.RowFilterExpression = string.IsNullOrWhiteSpace(request.RowFilterExpression)
+                ? null
+                : request.RowFilterExpression;
 
         report.UpdatedAt = DateTime.UtcNow;
 
@@ -210,6 +225,15 @@ public class ReportService : IReportService
                 query = query.Where(r => r.Name.Contains(filter.Search));
             if (filter.OwnedByMe)
                 query = query.Where(r => r.OwnerType == OwnerType.User && r.OwnerId == userId);
+            
+            if (!string.IsNullOrWhiteSpace(filter.Q))
+            {
+                var q = filter.Q.ToLower();
+                query = query.Where(r =>
+                    r.Name.ToLower().Contains(q) ||
+                    (r.Description != null && r.Description.ToLower().Contains(q)) ||
+                    r.QueryText.ToLower().Contains(q));
+            }
         }
 
         return await query.CountAsync(ct);
@@ -348,6 +372,7 @@ public class ReportFilter
     public List<string>? Tags { get; set; }
     public bool OwnedByMe { get; set; }
     public Guid? ConnectionId { get; set; }
+    public string? Q { get; set; }  // full-text search
 }
 
 public class CreateReportRequest
@@ -365,6 +390,7 @@ public class CreateReportRequest
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility Visibility { get; set; } = Visibility.Private;
+    public string? RowFilterExpression { get; set; }
 }
 
 public class UpdateReportRequest
@@ -381,4 +407,5 @@ public class UpdateReportRequest
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }
+    public string? RowFilterExpression { get; set; }
 }

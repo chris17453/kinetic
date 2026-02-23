@@ -111,8 +111,28 @@ public class PermissionService : IPermissionService
             case Visibility.Department:
                 if (user.DepartmentId.HasValue)
                 {
-                    // TODO: Check if entity owner is in same department
-                    return requiredLevel <= AccessLevel.View;
+                    // Resolve the owner's department ID
+                    Guid? ownerDepartmentId = null;
+
+                    if (entity.OwnerType == OwnerType.User)
+                    {
+                        ownerDepartmentId = await _db.Users
+                            .Where(u => u.Id == entity.OwnerId)
+                            .Select(u => u.DepartmentId)
+                            .FirstOrDefaultAsync();
+                    }
+                    else if (entity.OwnerType == OwnerType.Group)
+                    {
+                        ownerDepartmentId = await _db.Groups
+                            .Where(g => g.Id == entity.OwnerId)
+                            .Select(g => g.DepartmentId)
+                            .FirstOrDefaultAsync();
+                    }
+
+                    if (ownerDepartmentId.HasValue && ownerDepartmentId == user.DepartmentId)
+                    {
+                        return requiredLevel <= AccessLevel.View;
+                    }
                 }
                 break;
 

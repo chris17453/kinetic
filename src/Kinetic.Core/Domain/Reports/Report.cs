@@ -27,6 +27,13 @@ public class Report : IOwnedEntity
     public Connections.Connection? Connection { get; set; }
     public string QueryText { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional SQL fragment appended as a mandatory row-level security filter.
+    /// Example: <c>tenant_id = @CurrentUserId</c>
+    /// At execution time, <c>@CurrentUserId</c> is substituted with the executing user's ID.
+    /// </summary>
+    public string? RowFilterExpression { get; set; }
+
     // Definition
     public List<ParameterDefinition> Parameters { get; set; } = new();
     public List<ColumnDefinition> Columns { get; set; } = new();

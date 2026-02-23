@@ -1,14 +1,20 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate, useParams, useBeforeUnload } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Editor from '@monaco-editor/react';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import api from '../../lib/api/client';
 import type { Connection, ParameterDefinition, ColumnDefinition, VisualizationType, Visibility } from '../../lib/api/types';
 import { ParameterBuilder } from '../../components/parameters/ParameterBuilder';
 import { ColumnEditor } from '../../components/columns/ColumnEditor';
 import { VisualizationBuilder } from '../../components/visualizations/VisualizationBuilder';
+import { Breadcrumb, useToast } from '../../components/common';
 
-type Tab = 'query' | 'parameters' | 'columns' | 'visualization' | 'settings';
+type Tab = 'query' | 'parameters' | 'columns' | 'visualization' | 'settings' | 'schedule';
+
+interface ScheduleConfig {
+  enabled: boolean;
+  cronExpression: string;
+}
 
 interface ReportForm {
   name: string;
@@ -17,6 +23,7 @@ interface ReportForm {
   queryText: string;
   executionMode: 'Auto' | 'Manual';
   cacheMode: 'Live' | 'TempDb';
+  cacheTtlSeconds: number;
   visibility: Visibility;
   categoryId: string;
   tags: string[];
@@ -30,6 +37,34 @@ interface ReportForm {
     isDefault: boolean;
     config: Record<string, unknown>;
   }>;
+  schedule: ScheduleConfig;
+}
+
+const EMPTY_FORM: ReportForm = {
+  name: '',
+  description: '',
+  connectionId: '',
+  queryText: '',
+  executionMode: 'Manual',
+  cacheMode: 'Live',
+  cacheTtlSeconds: 300,
+  visibility: 'Private',
+  categoryId: '',
+  tags: [],
+  allowEmbed: false,
+  parameters: [],
+  columns: [],
+  visualizations: [],
+  schedule: {
+    enabled: false,
+    cronExpression: '0 8 * * 1-5',
+  },
+};
+
+interface SchemaTable {
+  name: string;
+  schema?: string;
+  columns: Array<{ name: string; type: string }>;
 }
 
 export function ReportBuilderPage() {
@@ -37,28 +72,53 @@ export function ReportBuilderPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const isEditing = !!id;
+  const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<Tab>('query');
-  const [form, setForm] = useState<ReportForm>({
-    name: '',
-    description: '',
-    connectionId: '',
-    queryText: '',
-    executionMode: 'Manual',
-    cacheMode: 'Live',
-    visibility: 'Private',
-    categoryId: '',
-    tags: [],
-    allowEmbed: false,
-    parameters: [],
-    columns: [],
-    visualizations: [],
-  });
+  const [form, setForm] = useState<ReportForm>(EMPTY_FORM);
+  const initialFormRef = useRef<ReportForm | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [vizWarning, setVizWarning] = useState(false);
+  const [schemaSidebarOpen, setSchemaSidebarOpen] = useState(false);
+  const [expandedTable, setExpandedTable] = useState<string | null>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+
   const [testResult, setTestResult] = useState<{
     columns: Array<{ name: string; type: string }>;
     rows: Record<string, unknown>[];
     rowCount: number;
   } | null>(null);
+
+  // Warn on browser/tab close when dirty
+  useBeforeUnload(
+    useCallback(
+      (e) => {
+        if (isDirty) {
+          e.preventDefault();
+        }
+      },
+      [isDirty]
+    )
+  );
+
+  // Warn on in-app navigation when dirty
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  const updateForm = useCallback((updater: Partial<ReportForm> | ((prev: ReportForm) => ReportForm)) => {
+    setForm((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      if (initialFormRef.current) {
+        setIsDirty(JSON.stringify(next) !== JSON.stringify(initialFormRef.current));
+      }
+      return next;
+    });
+  }, []);
 
   const { data: connections } = useQuery({
     queryKey: ['connections'],
@@ -82,13 +142,14 @@ export function ReportBuilderPage() {
     queryFn: async () => {
       const res = await api.get(`/reports/${id}`);
       const report = res.data;
-      setForm({
+      const loaded: ReportForm = {
         name: report.name,
         description: report.description || '',
         connectionId: report.connectionId,
         queryText: report.queryText,
         executionMode: report.executionMode,
         cacheMode: report.cacheMode,
+        cacheTtlSeconds: report.cacheTtlSeconds ?? 300,
         visibility: report.visibility,
         categoryId: report.categoryId || '',
         tags: report.tags || [],
@@ -96,10 +157,24 @@ export function ReportBuilderPage() {
         parameters: report.parameters || [],
         columns: report.columns || [],
         visualizations: report.visualizations || [],
-      });
+        schedule: report.schedule ?? { enabled: false, cronExpression: '0 8 * * 1-5' },
+      };
+      setForm(loaded);
+      initialFormRef.current = loaded;
+      setIsDirty(false);
       return report;
     },
     enabled: isEditing,
+  });
+
+  // Schema browser
+  const { data: schemaTables } = useQuery<SchemaTable[]>({
+    queryKey: ['connection-schema', form.connectionId],
+    queryFn: async () => {
+      const res = await api.get(`/connections/${form.connectionId}/schema`);
+      return res.data.tables ?? res.data;
+    },
+    enabled: !!form.connectionId && schemaSidebarOpen,
   });
 
   const saveMutation = useMutation({
@@ -111,7 +186,12 @@ export function ReportBuilderPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      toast.success(isEditing ? 'Report updated' : 'Report created');
+      setIsDirty(false);
       navigate('/catalog');
+    },
+    onError: (err: Error) => {
+      toast.error('Failed to save report', err.message);
     },
   });
 
@@ -125,9 +205,8 @@ export function ReportBuilderPage() {
     },
     onSuccess: (data) => {
       setTestResult(data);
-      // Auto-populate columns if empty
       if (form.columns.length === 0 && data.columns) {
-        setForm((prev) => ({
+        updateForm((prev) => ({
           ...prev,
           columns: data.columns.map((col: { name: string; type: string }, i: number) => ({
             id: crypto.randomUUID(),
@@ -141,118 +220,247 @@ export function ReportBuilderPage() {
         }));
       }
     },
+    onError: (err: Error) => {
+      toast.error('Query failed', err.message);
+    },
   });
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'query', label: 'Query' },
-    { id: 'parameters', label: `Parameters (${form.parameters.length})` },
-    { id: 'columns', label: `Columns (${form.columns.length})` },
-    { id: 'visualization', label: 'Visualization' },
-    { id: 'settings', label: 'Settings' },
+  const handleTabChange = (tab: Tab) => {
+    if (tab === 'visualization') {
+      if (!form.queryText.trim() || !form.connectionId) {
+        setVizWarning(true);
+        return;
+      }
+    }
+    setVizWarning(false);
+    setActiveTab(tab);
+  };
+
+  const insertTableName = (tableName: string) => {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const position = editor.getPosition();
+      editor.executeEdits('schema-browser', [
+        {
+          range: {
+            startLineNumber: position?.lineNumber ?? 1,
+            startColumn: position?.column ?? 1,
+            endLineNumber: position?.lineNumber ?? 1,
+            endColumn: position?.column ?? 1,
+          },
+          text: tableName,
+        },
+      ]);
+      editor.focus();
+    }
+  };
+
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: 'query', label: 'Query', icon: 'fa-code' },
+    { id: 'parameters', label: `Parameters (${form.parameters.length})`, icon: 'fa-sliders' },
+    { id: 'columns', label: `Columns (${form.columns.length})`, icon: 'fa-table-columns' },
+    { id: 'visualization', label: 'Visualization', icon: 'fa-chart-bar' },
+    { id: 'settings', label: 'Settings', icon: 'fa-gear' },
+    { id: 'schedule', label: 'Schedule', icon: 'fa-clock' },
+  ];
+
+  const breadcrumbs = [
+    { label: 'Dashboard', path: '/' },
+    { label: 'Reports', path: '/catalog' },
+    { label: isEditing ? 'Edit Report' : 'New Report' },
   ];
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Report Name"
-            className="text-2xl font-bold bg-transparent border-none focus:outline-none focus:ring-0 w-full"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => navigate('/catalog')} className="btn-secondary">
-            Cancel
-          </button>
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={!form.name || !form.connectionId || saveMutation.isPending}
-            className="btn-primary"
-          >
-            {saveMutation.isPending ? 'Saving...' : isEditing ? 'Update Report' : 'Create Report'}
-          </button>
+    <div className="d-flex flex-column" style={{ height: 'calc(100vh - 8rem)' }}>
+      {/* Sticky Header */}
+      <div className="card border-0 shadow-sm mb-3">
+        <div className="card-body py-2 px-3">
+          <Breadcrumb crumbs={breadcrumbs} />
+          <div className="d-flex align-items-center gap-3">
+            {/* Report Name */}
+            <div className="flex-grow-1">
+              <input
+                type="text"
+                className="form-control form-control-lg border-0 p-0 fw-bold fs-4 shadow-none"
+                placeholder="Untitled Report"
+                value={form.name}
+                onChange={(e) => updateForm({ name: e.target.value })}
+                style={{ background: 'transparent' }}
+              />
+            </div>
+
+            {/* Unsaved changes indicator */}
+            {isDirty && (
+              <span className="badge bg-warning text-dark">
+                <i className="fa-solid fa-circle-dot me-1"></i>
+                Unsaved
+              </span>
+            )}
+            {!isDirty && isEditing && (
+              <span className="badge bg-success">
+                <i className="fa-solid fa-circle-check me-1"></i>
+                Saved
+              </span>
+            )}
+
+            {/* Action Buttons */}
+            <button
+              className="btn btn-outline-secondary btn-sm"
+              onClick={() => {
+                if (isDirty && !window.confirm('You have unsaved changes. Leave anyway?')) return;
+                navigate('/catalog');
+              }}
+            >
+              <i className="fa-solid fa-xmark me-1"></i>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => saveMutation.mutate()}
+              disabled={!form.name || !form.connectionId || saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-floppy-disk me-1"></i>
+                  {isEditing ? 'Update Report' : 'Create Report'}
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-4">
-        <nav className="flex space-x-8">
-          {tabs.map((tab) => (
+      <ul className="nav nav-tabs px-0 mb-0">
+        {tabs.map((tab) => (
+          <li className="nav-item" key={tab.id}>
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => handleTabChange(tab.id)}
             >
+              <i className={`fa-solid ${tab.icon} me-1`}></i>
               {tab.label}
             </button>
-          ))}
-        </nav>
-      </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Visualization warning */}
+      {vizWarning && (
+        <div className="alert alert-warning d-flex align-items-center mt-2 mb-0 py-2" role="alert">
+          <i className="fa-solid fa-triangle-exclamation me-2"></i>
+          Please select a connection and write a query before configuring visualizations.
+          <button
+            type="button"
+            className="btn-close ms-auto"
+            onClick={() => setVizWarning(false)}
+          ></button>
+        </div>
+      )}
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-grow-1 overflow-hidden mt-0 pt-2">
         {activeTab === 'query' && (
           <QueryTab
             form={form}
-            setForm={setForm}
+            updateForm={updateForm}
             connections={connections || []}
             testResult={testResult}
             onTest={() => detectColumnsMutation.mutate()}
             isTesting={detectColumnsMutation.isPending}
+            schemaSidebarOpen={schemaSidebarOpen}
+            onToggleSidebar={() => setSchemaSidebarOpen((v) => !v)}
+            schemaTables={schemaTables || []}
+            expandedTable={expandedTable}
+            onExpandTable={setExpandedTable}
+            onInsertTableName={insertTableName}
+            editorRef={editorRef}
           />
         )}
         {activeTab === 'parameters' && (
           <ParameterBuilder
             parameters={form.parameters}
-            onChange={(parameters) => setForm({ ...form, parameters })}
+            onChange={(parameters) => updateForm({ parameters })}
           />
         )}
         {activeTab === 'columns' && (
           <ColumnEditor
             columns={form.columns}
-            onChange={(columns) => setForm({ ...form, columns })}
+            onChange={(columns) => updateForm({ columns })}
           />
         )}
         {activeTab === 'visualization' && (
           <VisualizationBuilder
             visualizations={form.visualizations}
             columns={form.columns}
-            onChange={(visualizations) => setForm({ ...form, visualizations })}
+            onChange={(visualizations) => updateForm({ visualizations })}
           />
         )}
         {activeTab === 'settings' && (
-          <SettingsTab form={form} setForm={setForm} categories={categories || []} />
+          <SettingsTab form={form} updateForm={updateForm} categories={categories || []} />
+        )}
+        {activeTab === 'schedule' && (
+          <ScheduleTab
+            schedule={form.schedule}
+            onChange={(schedule) => updateForm({ schedule })}
+          />
         )}
       </div>
     </div>
   );
 }
 
+// ─── Query Tab ────────────────────────────────────────────────────────────────
+
 interface QueryTabProps {
   form: ReportForm;
-  setForm: React.Dispatch<React.SetStateAction<ReportForm>>;
+  updateForm: (updater: Partial<ReportForm> | ((prev: ReportForm) => ReportForm)) => void;
   connections: Connection[];
-  testResult: { columns: Array<{ name: string; type: string }>; rows: Record<string, unknown>[]; rowCount: number } | null;
+  testResult: {
+    columns: Array<{ name: string; type: string }>;
+    rows: Record<string, unknown>[];
+    rowCount: number;
+  } | null;
   onTest: () => void;
   isTesting: boolean;
+  schemaSidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  schemaTables: SchemaTable[];
+  expandedTable: string | null;
+  onExpandTable: (name: string | null) => void;
+  onInsertTableName: (name: string) => void;
+  editorRef: React.MutableRefObject<Parameters<OnMount>[0] | null>;
 }
 
-function QueryTab({ form, setForm, connections, testResult, onTest, isTesting }: QueryTabProps) {
+function QueryTab({
+  form,
+  updateForm,
+  connections,
+  testResult,
+  onTest,
+  isTesting,
+  schemaSidebarOpen,
+  onToggleSidebar,
+  schemaTables,
+  expandedTable,
+  onExpandTable,
+  onInsertTableName,
+  editorRef,
+}: QueryTabProps) {
   return (
-    <div className="h-full flex flex-col gap-4">
-      <div className="flex items-center gap-4">
+    <div className="d-flex flex-column h-100 gap-2">
+      {/* Toolbar */}
+      <div className="d-flex align-items-center gap-2 flex-wrap">
         <select
-          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+          className="form-select form-select-sm"
+          style={{ maxWidth: 260 }}
           value={form.connectionId}
-          onChange={(e) => setForm({ ...form, connectionId: e.target.value })}
+          onChange={(e) => updateForm({ connectionId: e.target.value })}
         >
           <option value="">Select connection...</option>
           {connections.map((conn) => (
@@ -261,201 +469,519 @@ function QueryTab({ form, setForm, connections, testResult, onTest, isTesting }:
             </option>
           ))}
         </select>
+
         <button
+          className="btn btn-primary btn-sm"
           onClick={onTest}
           disabled={!form.connectionId || !form.queryText.trim() || isTesting}
-          className="btn-primary"
         >
-          {isTesting ? 'Testing...' : '▶ Test Query'}
+          {isTesting ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+              Running...
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-play me-1"></i>
+              Run Preview
+            </>
+          )}
         </button>
+
+        <div className="ms-auto">
+          <button
+            className={`btn btn-sm ${schemaSidebarOpen ? 'btn-secondary' : 'btn-outline-secondary'}`}
+            onClick={onToggleSidebar}
+            title="Toggle schema browser"
+          >
+            <i className="fa-solid fa-sitemap me-1"></i>
+            Schema
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-2 gap-4">
-        <div className="card overflow-hidden">
-          <Editor
-            height="100%"
-            defaultLanguage="sql"
-            value={form.queryText}
-            onChange={(value) => setForm({ ...form, queryText: value || '' })}
-            theme="vs-light"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              wordWrap: 'on',
-              automaticLayout: true,
-            }}
+      {/* Editor + Preview + Sidebar */}
+      <div className="d-flex flex-grow-1 gap-2 overflow-hidden">
+        {/* Editor column */}
+        <div className="d-flex flex-column flex-grow-1 gap-2 overflow-hidden" style={{ minWidth: 0 }}>
+          {/* Monaco Editor */}
+          <div
+            className="card border-0 shadow-sm overflow-hidden"
+            style={{ flex: testResult ? '0 0 55%' : '1 1 auto' }}
+          >
+            <Editor
+              height="100%"
+              defaultLanguage="sql"
+              value={form.queryText}
+              onChange={(value) => updateForm({ queryText: value || '' })}
+              theme="vs-light"
+              onMount={(editor) => {
+                editorRef.current = editor;
+              }}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                wordWrap: 'on',
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+              }}
+            />
+          </div>
+
+          {/* Inline Preview */}
+          {testResult && (
+            <div className="card border-0 shadow-sm overflow-auto" style={{ maxHeight: 220 }}>
+              <div className="card-header bg-white py-2 d-flex align-items-center justify-content-between">
+                <span className="text-muted small">
+                  <i className="fa-solid fa-table me-1"></i>
+                  Preview — {testResult.rowCount} row{testResult.rowCount !== 1 ? 's' : ''},{' '}
+                  {testResult.columns.length} column{testResult.columns.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="card-body p-0">
+                <table className="table table-sm table-bordered table-hover mb-0 small">
+                  <thead className="table-light sticky-top">
+                    <tr>
+                      {testResult.columns.map((col) => (
+                        <th key={col.name} className="text-nowrap fw-semibold">
+                          {col.name}
+                          <span className="text-muted fw-normal ms-1 small">({col.type})</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testResult.rows.slice(0, 5).map((row, i) => (
+                      <tr key={i}>
+                        {testResult.columns.map((col) => (
+                          <td
+                            key={col.name}
+                            className="text-truncate"
+                            style={{ maxWidth: 140 }}
+                            title={String(row[col.name] ?? '')}
+                          >
+                            {String(row[col.name] ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {!testResult && (
+            <div className="text-center text-muted small py-2">
+              <i className="fa-solid fa-circle-info me-1"></i>
+              Select a connection, write a query, then click Run Preview to see results.
+            </div>
+          )}
+        </div>
+
+        {/* Schema Sidebar */}
+        {schemaSidebarOpen && (
+          <div
+            className="card border-0 shadow-sm overflow-auto flex-shrink-0"
+            style={{ width: 220 }}
+          >
+            <div className="card-header bg-white py-2 fw-semibold small d-flex align-items-center justify-content-between">
+              <span>
+                <i className="fa-solid fa-database me-1"></i>
+                Schema
+              </span>
+              <button
+                className="btn btn-sm btn-close"
+                onClick={onToggleSidebar}
+                title="Close sidebar"
+              ></button>
+            </div>
+            <div className="card-body p-0">
+              {!form.connectionId && (
+                <p className="text-muted small p-3 mb-0">Select a connection to browse schema.</p>
+              )}
+              {form.connectionId && schemaTables.length === 0 && (
+                <p className="text-muted small p-3 mb-0">
+                  <span className="spinner-border spinner-border-sm me-1"></span>
+                  Loading...
+                </p>
+              )}
+              <ul className="list-group list-group-flush">
+                {schemaTables.map((table) => {
+                  const fullName = table.schema ? `${table.schema}.${table.name}` : table.name;
+                  const isExpanded = expandedTable === fullName;
+                  return (
+                    <li key={fullName} className="list-group-item p-0 border-0">
+                      <div
+                        className="d-flex align-items-center px-2 py-1 gap-1"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <button
+                          className="btn btn-sm p-0 text-muted border-0"
+                          style={{ lineHeight: 1, width: 16 }}
+                          onClick={() => onExpandTable(isExpanded ? null : fullName)}
+                        >
+                          <i
+                            className={`fa-solid fa-chevron-${isExpanded ? 'down' : 'right'} small`}
+                          ></i>
+                        </button>
+                        <i className="fa-solid fa-table text-secondary small"></i>
+                        <button
+                          className="btn btn-sm p-0 border-0 text-start text-truncate"
+                          style={{ flex: 1, fontSize: '0.78rem' }}
+                          onClick={() => onInsertTableName(fullName)}
+                          title={`Insert ${fullName}`}
+                        >
+                          {table.name}
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <ul className="list-unstyled ps-4 pe-2 pb-1 mb-0">
+                          {table.columns.map((col) => (
+                            <li
+                              key={col.name}
+                              className="d-flex align-items-center gap-1 py-0"
+                              style={{ fontSize: '0.75rem' }}
+                            >
+                              <i
+                                className="fa-solid fa-circle text-secondary"
+                                style={{ fontSize: '0.4rem' }}
+                              ></i>
+                              <span className="text-truncate">{col.name}</span>
+                              <span className="text-muted ms-auto">{col.type}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Tab ──────────────────────────────────────────────────────────────
+
+interface SettingsTabProps {
+  form: ReportForm;
+  updateForm: (updater: Partial<ReportForm> | ((prev: ReportForm) => ReportForm)) => void;
+  categories: Array<{ id: string; name: string; icon?: string }>;
+}
+
+function SettingsTab({ form, updateForm, categories }: SettingsTabProps) {
+  const [tagInput, setTagInput] = useState('');
+
+  const addTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !form.tags.includes(trimmed)) {
+      updateForm({ tags: [...form.tags, trimmed] });
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    updateForm({ tags: form.tags.filter((t) => t !== tag) });
+  };
+
+  return (
+    <div className="overflow-auto h-100">
+      <div style={{ maxWidth: 680 }} className="py-2">
+        {/* Description */}
+        <div className="mb-4">
+          <label className="form-label fw-semibold">Description</label>
+          <textarea
+            className="form-control"
+            rows={3}
+            placeholder="Describe what this report shows..."
+            value={form.description}
+            onChange={(e) => updateForm({ description: e.target.value })}
           />
         </div>
 
-        <div className="card overflow-auto">
-          {testResult ? (
-            <div>
-              <div className="p-3 bg-gray-50 border-b text-sm text-gray-600">
-                {testResult.rowCount} rows • {testResult.columns.length} columns
-              </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {testResult.columns.map((col) => (
-                      <th key={col.name} className="px-3 py-2 text-left text-xs font-medium text-gray-500">
-                        {col.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {testResult.rows.slice(0, 10).map((row, i) => (
-                    <tr key={i}>
-                      {testResult.columns.map((col) => (
-                        <td key={col.name} className="px-3 py-2 text-sm text-gray-900 truncate max-w-32">
-                          {String(row[col.name] ?? '')}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              Test query to see preview
+        <div className="row g-3 mb-4">
+          {/* Execution Mode */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Execution Mode</label>
+            <select
+              className="form-select"
+              value={form.executionMode}
+              onChange={(e) =>
+                updateForm({ executionMode: e.target.value as 'Auto' | 'Manual' })
+              }
+            >
+              <option value="Manual">Manual — click to run</option>
+              <option value="Auto">Auto — run on load</option>
+            </select>
+          </div>
+
+          {/* Cache Mode */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Cache Mode</label>
+            <select
+              className="form-select"
+              value={form.cacheMode}
+              onChange={(e) =>
+                updateForm({ cacheMode: e.target.value as 'Live' | 'TempDb' })
+              }
+            >
+              <option value="Live">Live — direct query</option>
+              <option value="TempDb">TempDb — cache results</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Cache TTL (only shown when TempDb) */}
+        {form.cacheMode === 'TempDb' && (
+          <div className="mb-4">
+            <label className="form-label fw-semibold">Cache TTL (seconds)</label>
+            <input
+              type="number"
+              className="form-control"
+              style={{ maxWidth: 200 }}
+              min={30}
+              step={30}
+              value={form.cacheTtlSeconds}
+              onChange={(e) =>
+                updateForm({ cacheTtlSeconds: parseInt(e.target.value, 10) || 300 })
+              }
+            />
+            <div className="form-text">How long to cache results before re-querying.</div>
+          </div>
+        )}
+
+        <div className="row g-3 mb-4">
+          {/* Visibility */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Visibility</label>
+            <select
+              className="form-select"
+              value={form.visibility}
+              onChange={(e) => updateForm({ visibility: e.target.value as Visibility })}
+            >
+              <option value="Private">Private</option>
+              <option value="Group">Group</option>
+              <option value="Department">Department</option>
+              <option value="Public">Public</option>
+            </select>
+          </div>
+
+          {/* Category */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Category</label>
+            <select
+              className="form-select"
+              value={form.categoryId}
+              onChange={(e) => updateForm({ categoryId: e.target.value })}
+            >
+              <option value="">No category</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="mb-4">
+          <label className="form-label fw-semibold">Tags</label>
+          <div className="input-group">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Type a tag and press Enter or Add"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+            />
+            <button className="btn btn-outline-secondary" type="button" onClick={addTag}>
+              <i className="fa-solid fa-plus me-1"></i>Add
+            </button>
+          </div>
+          {form.tags.length > 0 && (
+            <div className="d-flex flex-wrap gap-2 mt-2">
+              {form.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="badge bg-primary d-flex align-items-center gap-1 fw-normal px-2 py-1"
+                  style={{ fontSize: '0.82rem' }}
+                >
+                  <i className="fa-solid fa-tag" style={{ fontSize: '0.7rem' }}></i>
+                  {tag}
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white ms-1"
+                    style={{ fontSize: '0.55rem' }}
+                    onClick={() => removeTag(tag)}
+                    aria-label={`Remove tag ${tag}`}
+                  ></button>
+                </span>
+              ))}
             </div>
           )}
+        </div>
+
+        {/* Allow Embed */}
+        <div className="mb-3 form-check">
+          <input
+            type="checkbox"
+            className="form-check-input"
+            id="allowEmbed"
+            checked={form.allowEmbed}
+            onChange={(e) => updateForm({ allowEmbed: e.target.checked })}
+          />
+          <label className="form-check-label" htmlFor="allowEmbed">
+            Allow embedding this report in external pages
+          </label>
+          <div className="form-text">
+            Enables an embed token that lets this report be displayed in iframes.
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-interface SettingsTabProps {
-  form: ReportForm;
-  setForm: React.Dispatch<React.SetStateAction<ReportForm>>;
-  categories: Array<{ id: string; name: string; icon?: string }>;
+// ─── Schedule Tab ─────────────────────────────────────────────────────────────
+
+interface ScheduleTabProps {
+  schedule: ScheduleConfig;
+  onChange: (schedule: ScheduleConfig) => void;
 }
 
-function SettingsTab({ form, setForm, categories }: SettingsTabProps) {
-  const [tagInput, setTagInput] = useState('');
+const CRON_PRESETS: Array<{ label: string; value: string }> = [
+  { label: 'Every day at 8am', value: '0 8 * * *' },
+  { label: 'Weekdays at 8am', value: '0 8 * * 1-5' },
+  { label: 'Every Monday at 9am', value: '0 9 * * 1' },
+  { label: 'Every hour', value: '0 * * * *' },
+  { label: 'Every 15 minutes', value: '*/15 * * * *' },
+  { label: 'First day of month at midnight', value: '0 0 1 * *' },
+];
 
-  const addTag = () => {
-    if (tagInput.trim() && !form.tags.includes(tagInput.trim())) {
-      setForm({ ...form, tags: [...form.tags, tagInput.trim()] });
-      setTagInput('');
-    }
+function ScheduleTab({ schedule, onChange }: ScheduleTabProps) {
+  const handlePreset = (value: string) => {
+    onChange({ ...schedule, cronExpression: value });
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <label className="label">Description</label>
-        <textarea
-          className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"
-          rows={3}
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
-      </div>
+    <div className="overflow-auto h-100">
+      <div style={{ maxWidth: 640 }} className="py-2">
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-header bg-white fw-semibold">
+            <i className="fa-solid fa-clock me-2 text-primary"></i>
+            Scheduled Execution
+          </div>
+          <div className="card-body">
+            {/* Enabled toggle */}
+            <div className="d-flex align-items-center justify-content-between mb-4">
+              <div>
+                <div className="fw-semibold">Enable Schedule</div>
+                <div className="text-muted small">
+                  Automatically run this report on a recurring schedule.
+                </div>
+              </div>
+              <div className="form-check form-switch mb-0">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                  id="scheduleEnabled"
+                  checked={schedule.enabled}
+                  onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
+                  style={{ width: '2.5rem', height: '1.25rem' }}
+                />
+                <label className="form-check-label visually-hidden" htmlFor="scheduleEnabled">
+                  Enable schedule
+                </label>
+              </div>
+            </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Execution Mode</label>
-          <select
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"
-            value={form.executionMode}
-            onChange={(e) => setForm({ ...form, executionMode: e.target.value as 'Auto' | 'Manual' })}
-          >
-            <option value="Manual">Manual - Click to run</option>
-            <option value="Auto">Auto - Run on load</option>
-          </select>
+            {/* Cron expression */}
+            <fieldset disabled={!schedule.enabled}>
+              <div className="mb-3">
+                <label className="form-label fw-semibold" htmlFor="cronExpression">
+                  Cron Expression
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text">
+                    <i className="fa-solid fa-terminal text-muted"></i>
+                  </span>
+                  <input
+                    id="cronExpression"
+                    type="text"
+                    className="form-control font-monospace"
+                    placeholder="0 8 * * 1-5"
+                    value={schedule.cronExpression}
+                    onChange={(e) => onChange({ ...schedule, cronExpression: e.target.value })}
+                  />
+                </div>
+                <div className="form-text">
+                  Standard 5-field cron format: minute hour day-of-month month day-of-week
+                </div>
+              </div>
+
+              {/* Presets */}
+              <div className="mb-3">
+                <div className="form-label fw-semibold mb-2">Quick Presets</div>
+                <div className="d-flex flex-wrap gap-2">
+                  {CRON_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      className={`btn btn-sm ${
+                        schedule.cronExpression === preset.value
+                          ? 'btn-primary'
+                          : 'btn-outline-secondary'
+                      }`}
+                      onClick={() => handlePreset(preset.value)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="alert alert-info d-flex align-items-start gap-2 py-2 mb-0">
+                <i className="fa-solid fa-circle-info mt-1 flex-shrink-0"></i>
+                <div>
+                  <strong>Schedule preview:</strong>{' '}
+                  <span className="font-monospace">{schedule.cronExpression || '—'}</span>
+                  <div className="small mt-1 text-muted">
+                    Results will be cached and the report will show "Last refreshed" timestamp when
+                    viewed.
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+          </div>
         </div>
 
-        <div>
-          <label className="label">Cache Mode</label>
-          <select
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"
-            value={form.cacheMode}
-            onChange={(e) => setForm({ ...form, cacheMode: e.target.value as 'Live' | 'TempDb' })}
-          >
-            <option value="Live">Live - Direct query</option>
-            <option value="TempDb">TempDb - Cache results</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Visibility</label>
-          <select
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"
-            value={form.visibility}
-            onChange={(e) => setForm({ ...form, visibility: e.target.value as Visibility })}
-          >
-            <option value="Private">Private</option>
-            <option value="Group">Group</option>
-            <option value="Department">Department</option>
-            <option value="Public">Public</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="label">Category</label>
-          <select
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"
-            value={form.categoryId}
-            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-          >
-            <option value="">No category</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.icon} {cat.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="label">Tags</label>
-        <div className="flex gap-2 mt-1">
-          <input
-            type="text"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-            placeholder="Add tag..."
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-          />
-          <button onClick={addTag} className="btn-secondary">
-            Add
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {form.tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 text-primary-700 rounded text-sm"
-            >
-              {tag}
-              <button
-                onClick={() => setForm({ ...form, tags: form.tags.filter((t) => t !== tag) })}
-                className="hover:text-primary-900"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={form.allowEmbed}
-            onChange={(e) => setForm({ ...form, allowEmbed: e.target.checked })}
-            className="rounded border-gray-300 text-primary-600"
-          />
-          <span className="text-sm">Allow embedding in external pages</span>
-        </label>
+        {/* Status indicator */}
+        {schedule.enabled && (
+          <div className="alert alert-success d-flex align-items-center gap-2 py-2">
+            <i className="fa-solid fa-circle-check"></i>
+            Schedule is <strong>active</strong>. Save the report to apply changes.
+          </div>
+        )}
+        {!schedule.enabled && (
+          <div className="alert alert-secondary d-flex align-items-center gap-2 py-2">
+            <i className="fa-solid fa-circle-pause"></i>
+            Schedule is <strong>disabled</strong>. Enable the toggle above to activate automatic
+            runs.
+          </div>
+        )}
       </div>
     </div>
   );

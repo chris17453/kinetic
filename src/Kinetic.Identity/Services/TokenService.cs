@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Kinetic.Core.Domain.Identity;
@@ -12,21 +13,58 @@ public interface ITokenService
     string GenerateAccessToken(User user, IEnumerable<string> permissions);
     string GenerateRefreshToken();
     ClaimsPrincipal? ValidateToken(string token);
+    SecurityKey GetSigningKey();
+    SecurityKey GetValidationKey();
 }
 
 public class TokenService : ITokenService
 {
     private readonly JwtSettings _settings;
+    private readonly RSA? _rsaPrivate;
+    private readonly RSA? _rsaPublic;
 
     public TokenService(JwtSettings settings)
     {
         _settings = settings;
+
+        if (!string.IsNullOrEmpty(settings.RsaPrivateKeyPem))
+        {
+            _rsaPrivate = RSA.Create();
+            _rsaPrivate.ImportFromPem(settings.RsaPrivateKeyPem);
+        }
+
+        if (!string.IsNullOrEmpty(settings.RsaPublicKeyPem))
+        {
+            _rsaPublic = RSA.Create();
+            _rsaPublic.ImportFromPem(settings.RsaPublicKeyPem);
+        }
+    }
+
+    public SecurityKey GetSigningKey()
+    {
+        if (_rsaPrivate != null)
+            return new RsaSecurityKey(_rsaPrivate);
+        return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
+    }
+
+    public SecurityKey GetValidationKey()
+    {
+        if (_rsaPublic != null)
+            return new RsaSecurityKey(_rsaPublic);
+        if (_rsaPrivate != null)
+            return new RsaSecurityKey(_rsaPrivate);
+        return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
     }
 
     public string GenerateAccessToken(User user, IEnumerable<string> permissions)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        SigningCredentials credentials;
+        if (_rsaPrivate != null)
+            credentials = new SigningCredentials(new RsaSecurityKey(_rsaPrivate), SecurityAlgorithms.RsaSha256);
+        else
+            credentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret)),
+                SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>
         {
@@ -38,21 +76,15 @@ public class TokenService : ITokenService
         };
 
         if (user.DepartmentId.HasValue)
-        {
             claims.Add(new Claim("department_id", user.DepartmentId.Value.ToString()));
-        }
 
         // Add group IDs
         foreach (var ug in user.UserGroups)
-        {
             claims.Add(new Claim("group", ug.GroupId.ToString()));
-        }
 
         // Add permissions
         foreach (var permission in permissions)
-        {
             claims.Add(new Claim("permission", permission));
-        }
 
         var token = new JwtSecurityToken(
             issuer: _settings.Issuer,
@@ -72,9 +104,7 @@ public class TokenService : ITokenService
 
     public ClaimsPrincipal? ValidateToken(string token)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var handler = new JwtSecurityTokenHandler();
-
         try
         {
             var principal = handler.ValidateToken(token, new TokenValidationParameters
@@ -85,10 +115,9 @@ public class TokenService : ITokenService
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = _settings.Issuer,
                 ValidAudience = _settings.Audience,
-                IssuerSigningKey = key,
+                IssuerSigningKey = GetValidationKey(),
                 ClockSkew = TimeSpan.Zero
             }, out _);
-
             return principal;
         }
         catch

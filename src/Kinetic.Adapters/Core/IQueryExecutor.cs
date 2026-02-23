@@ -21,6 +21,11 @@ public interface IQueryExecutor
     /// Stream results for large datasets
     /// </summary>
     IAsyncEnumerable<Dictionary<string, object?>> StreamAsync(QueryExecutionRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Return the query execution plan without executing the query
+    /// </summary>
+    Task<string> ExplainAsync(string connectionString, string query, int timeoutSeconds = 30, CancellationToken ct = default);
 }
 
 public class QueryExecutionRequest
@@ -42,6 +47,7 @@ public class QueryExecutionRequest
     public bool IncludeTotalCount { get; set; } = false;
     public string? SortColumn { get; set; }
     public SortDirection SortDirection { get; set; } = SortDirection.Ascending;
+    public IReadOnlyList<string>? AllowedColumns { get; set; }
 }
 
 public class QueryExecutionResult

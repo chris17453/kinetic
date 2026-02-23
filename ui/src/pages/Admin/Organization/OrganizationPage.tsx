@@ -1,11 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Palette, Image, Type, Settings, Upload, Save, Eye } from 'lucide-react';
+import { useState } from 'react';
 
 interface OrganizationBranding {
   logoUrl: string;
@@ -119,6 +112,59 @@ const defaultSettings: OrganizationSettings = {
   defaultCanExport: true,
 };
 
+const ColorInput = ({ label, value, onChange, darkMode = false }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  darkMode?: boolean;
+}) => (
+  <div className="d-flex align-items-center gap-2 mb-3">
+    <input
+      type="color"
+      value={value}
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+      style={{ width: 40, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4, padding: 2 }}
+    />
+    <div className="flex-grow-1">
+      <label className={`form-label mb-1${darkMode ? ' text-light' : ''}`}>{label}</label>
+      <input
+        type="text"
+        className="form-control form-control-sm font-monospace"
+        value={value}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+        placeholder="#000000"
+      />
+    </div>
+  </div>
+);
+
+interface SettingSwitchProps {
+  id: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}
+
+const SettingSwitch = ({ id, label, description, checked, onChange }: SettingSwitchProps) => (
+  <div className="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <label className="form-label mb-0" htmlFor={id}>{label}</label>
+      {description && <div className="text-muted" style={{ fontSize: '0.75rem' }}>{description}</div>}
+    </div>
+    <div className="form-check form-switch mb-0">
+      <input
+        className="form-check-input"
+        type="checkbox"
+        role="switch"
+        id={id}
+        checked={checked}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
+      />
+    </div>
+  </div>
+);
+
 export function OrganizationPage() {
   const [branding, setBranding] = useState<OrganizationBranding>(defaultBranding);
   const [settings, setSettings] = useState<OrganizationSettings>(defaultSettings);
@@ -126,6 +172,7 @@ export function OrganizationPage() {
   const [orgSlug, setOrgSlug] = useState('my-org');
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light');
+  const [activeTab, setActiveTab] = useState('branding');
 
   const handleSave = async () => {
     setSaving(true);
@@ -137,373 +184,330 @@ export function OrganizationPage() {
     }
   };
 
-  const ColorInput = ({ label, value, onChange, darkMode = false }: {
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    darkMode?: boolean;
-  }) => (
-    <div className="flex items-center gap-3">
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-10 h-10 rounded border cursor-pointer"
-      />
-      <div className="flex-1">
-        <Label className={darkMode ? 'text-gray-300' : ''}>{label}</Label>
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="font-mono text-sm mt-1"
-          placeholder="#000000"
-        />
-      </div>
-    </div>
-  );
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container py-4">
+      {/* Header */}
+      <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold">Organization Settings</h1>
-          <p className="text-muted-foreground">Configure branding, themes, and organization-wide settings</p>
+          <h1 className="h3 fw-bold mb-1">Organization Settings</h1>
+          <p className="text-muted mb-0">Configure branding, themes, and organization-wide settings</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setPreviewMode(m => m === 'light' ? 'dark' : 'light')}>
-            <Eye className="w-4 h-4 mr-2" />
+        <div className="d-flex gap-2">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => setPreviewMode(m => m === 'light' ? 'dark' : 'light')}
+          >
+            <i className="fa-solid fa-eye me-2"></i>
             Preview {previewMode === 'light' ? 'Dark' : 'Light'}
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
+          </button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            <i className="fa-solid fa-floppy-disk me-2"></i>
             {saving ? 'Saving...' : 'Save Changes'}
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Organization Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization Info</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4">
-          <div>
-            <Label>Organization Name</Label>
-            <Input value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+      <div className="card mb-4">
+        <div className="card-header">
+          <h5 className="card-title mb-0">Organization Info</h5>
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label">Organization Name</label>
+              <input
+                type="text"
+                className="form-control"
+                value={orgName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrgName(e.target.value)}
+              />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">URL Slug</label>
+              <input
+                type="text"
+                className="form-control"
+                value={orgSlug}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrgSlug(e.target.value)}
+                placeholder="my-org"
+              />
+              <div className="form-text">Used in URLs: /org/{orgSlug}/...</div>
+            </div>
           </div>
-          <div>
-            <Label>URL Slug</Label>
-            <Input value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)} placeholder="my-org" />
-            <p className="text-xs text-muted-foreground mt-1">Used in URLs: /org/{orgSlug}/...</p>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Tabs defaultValue="branding" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="branding">
-            <Image className="w-4 h-4 mr-2" />
-            Images & Logo
-          </TabsTrigger>
-          <TabsTrigger value="colors">
-            <Palette className="w-4 h-4 mr-2" />
+      {/* Tabs */}
+      <ul className="nav nav-tabs mb-3">
+        <li className="nav-item">
+          <button
+            className={`nav-link${activeTab === 'branding' ? ' active' : ''}`}
+            onClick={() => setActiveTab('branding')}
+          >
+            <i className="fa-solid fa-image me-2"></i>
+            Images &amp; Logo
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
+            className={`nav-link${activeTab === 'colors' ? ' active' : ''}`}
+            onClick={() => setActiveTab('colors')}
+          >
+            <i className="fa-solid fa-palette me-2"></i>
             Colors
-          </TabsTrigger>
-          <TabsTrigger value="typography">
-            <Type className="w-4 h-4 mr-2" />
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
+            className={`nav-link${activeTab === 'typography' ? ' active' : ''}`}
+            onClick={() => setActiveTab('typography')}
+          >
+            <i className="fa-solid fa-font me-2"></i>
             Typography
-          </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Settings className="w-4 h-4 mr-2" />
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
+            className={`nav-link${activeTab === 'settings' ? ' active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            <i className="fa-solid fa-gear me-2"></i>
             Settings
-          </TabsTrigger>
-        </TabsList>
+          </button>
+        </li>
+      </ul>
 
-        {/* Images & Logo Tab */}
-        <TabsContent value="branding">
-          <Card>
-            <CardHeader>
-              <CardTitle>Images & Branding</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
-                {/* Logo Upload */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold">Logo</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                    {branding.logoUrl ? (
-                      <img src={branding.logoUrl} alt="Logo" className="max-h-20 mx-auto" />
-                    ) : (
-                      <div className="text-muted-foreground">
-                        <Upload className="w-8 h-8 mx-auto mb-2" />
-                        <p>Drop logo here or click to upload</p>
-                        <p className="text-xs">PNG, SVG recommended. Max 2MB</p>
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    placeholder="Or enter logo URL"
-                    value={branding.logoUrl}
-                    onChange={(e) => setBranding({ ...branding, logoUrl: e.target.value })}
-                  />
+      {/* Images & Logo Tab */}
+      {activeTab === 'branding' && (
+        <div className="card">
+          <div className="card-header">
+            <h5 className="card-title mb-0">Images &amp; Branding</h5>
+          </div>
+          <div className="card-body">
+            <div className="row g-4">
+              {/* Logo Upload */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold fs-6">Logo</label>
+                <div
+                  className="border border-2 border-dashed rounded p-4 text-center mb-2"
+                  style={{ borderStyle: 'dashed' }}
+                >
+                  {branding.logoUrl ? (
+                    <img src={branding.logoUrl} alt="Logo" style={{ maxHeight: 80 }} />
+                  ) : (
+                    <div className="text-muted">
+                      <i className="fa-solid fa-upload fa-2x mb-2 d-block"></i>
+                      <p className="mb-1">Drop logo here or click to upload</p>
+                      <small>PNG, SVG recommended. Max 2MB</small>
+                    </div>
+                  )}
                 </div>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Or enter logo URL"
+                  value={branding.logoUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, logoUrl: e.target.value })}
+                />
+              </div>
 
-                {/* Favicon */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold">Favicon</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                    {branding.faviconUrl ? (
-                      <img src={branding.faviconUrl} alt="Favicon" className="w-8 h-8 mx-auto" />
-                    ) : (
-                      <div className="text-muted-foreground">
-                        <Upload className="w-8 h-8 mx-auto mb-2" />
-                        <p>Drop favicon here</p>
-                        <p className="text-xs">ICO, PNG. 32x32 or 64x64</p>
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    placeholder="Or enter favicon URL"
-                    value={branding.faviconUrl}
-                    onChange={(e) => setBranding({ ...branding, faviconUrl: e.target.value })}
-                  />
+              {/* Favicon */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold fs-6">Favicon</label>
+                <div
+                  className="border border-2 rounded p-4 text-center mb-2"
+                  style={{ borderStyle: 'dashed' }}
+                >
+                  {branding.faviconUrl ? (
+                    <img src={branding.faviconUrl} alt="Favicon" style={{ width: 32, height: 32 }} />
+                  ) : (
+                    <div className="text-muted">
+                      <i className="fa-solid fa-upload fa-2x mb-2 d-block"></i>
+                      <p className="mb-1">Drop favicon here</p>
+                      <small>ICO, PNG. 32x32 or 64x64</small>
+                    </div>
+                  )}
                 </div>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Or enter favicon URL"
+                  value={branding.faviconUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, faviconUrl: e.target.value })}
+                />
+              </div>
 
-                {/* Login Background */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold">Login Background</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center h-40 overflow-hidden">
-                    {branding.loginBackgroundUrl ? (
-                      <img 
-                        src={branding.loginBackgroundUrl} 
-                        alt="Login BG" 
-                        className="w-full h-full object-cover rounded"
-                      />
-                    ) : (
-                      <div className="text-muted-foreground">
-                        <Upload className="w-8 h-8 mx-auto mb-2" />
-                        <p>Login page background</p>
-                        <p className="text-xs">1920x1080 recommended</p>
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    placeholder="Or enter background URL"
-                    value={branding.loginBackgroundUrl}
-                    onChange={(e) => setBranding({ ...branding, loginBackgroundUrl: e.target.value })}
-                  />
+              {/* Login Background */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold fs-6">Login Background</label>
+                <div
+                  className="border border-2 rounded mb-2 overflow-hidden"
+                  style={{ borderStyle: 'dashed', height: 160 }}
+                >
+                  {branding.loginBackgroundUrl ? (
+                    <img
+                      src={branding.loginBackgroundUrl}
+                      alt="Login BG"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="text-muted d-flex flex-column align-items-center justify-content-center h-100">
+                      <i className="fa-solid fa-upload fa-2x mb-2"></i>
+                      <p className="mb-1">Login page background</p>
+                      <small>1920x1080 recommended</small>
+                    </div>
+                  )}
                 </div>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Or enter background URL"
+                  value={branding.loginBackgroundUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, loginBackgroundUrl: e.target.value })}
+                />
+              </div>
 
-                {/* Dashboard Background */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold">Dashboard Background</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center h-40 overflow-hidden">
-                    {branding.dashboardBackgroundUrl ? (
-                      <img 
-                        src={branding.dashboardBackgroundUrl} 
-                        alt="Dashboard BG" 
-                        className="w-full h-full object-cover rounded"
-                      />
-                    ) : (
-                      <div className="text-muted-foreground">
-                        <Upload className="w-8 h-8 mx-auto mb-2" />
-                        <p>Dashboard background (optional)</p>
-                        <p className="text-xs">Subtle pattern or gradient</p>
-                      </div>
-                    )}
+              {/* Dashboard Background */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold fs-6">Dashboard Background</label>
+                <div
+                  className="border border-2 rounded mb-2 overflow-hidden"
+                  style={{ borderStyle: 'dashed', height: 160 }}
+                >
+                  {branding.dashboardBackgroundUrl ? (
+                    <img
+                      src={branding.dashboardBackgroundUrl}
+                      alt="Dashboard BG"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="text-muted d-flex flex-column align-items-center justify-content-center h-100">
+                      <i className="fa-solid fa-upload fa-2x mb-2"></i>
+                      <p className="mb-1">Dashboard background (optional)</p>
+                      <small>Subtle pattern or gradient</small>
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Or enter background URL"
+                  value={branding.dashboardBackgroundUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, dashboardBackgroundUrl: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Colors Tab */}
+      {activeTab === 'colors' && (
+        <>
+          <div className="row g-4">
+            {/* Light Mode */}
+            <div className="col-md-6">
+              <div className="card h-100">
+                <div className="card-header">
+                  <h5 className="card-title mb-0">Light Mode Colors</h5>
+                </div>
+                <div className="card-body">
+                  <ColorInput label="Primary Color" value={branding.primaryColor} onChange={(v: string) => setBranding({ ...branding, primaryColor: v })} />
+                  <ColorInput label="Secondary Color" value={branding.secondaryColor} onChange={(v: string) => setBranding({ ...branding, secondaryColor: v })} />
+                  <ColorInput label="Accent Color" value={branding.accentColor} onChange={(v: string) => setBranding({ ...branding, accentColor: v })} />
+                  <ColorInput label="Background" value={branding.backgroundColor} onChange={(v: string) => setBranding({ ...branding, backgroundColor: v })} />
+                  <ColorInput label="Surface" value={branding.surfaceColor} onChange={(v: string) => setBranding({ ...branding, surfaceColor: v })} />
+                  <ColorInput label="Text" value={branding.textColor} onChange={(v: string) => setBranding({ ...branding, textColor: v })} />
+                  <ColorInput label="Text Muted" value={branding.textMutedColor} onChange={(v: string) => setBranding({ ...branding, textMutedColor: v })} />
+                  <ColorInput label="Border" value={branding.borderColor} onChange={(v: string) => setBranding({ ...branding, borderColor: v })} />
+                  <hr />
+                  <h6 className="fw-medium mb-3">Status Colors</h6>
+                  <div className="row g-2">
+                    <div className="col-6">
+                      <ColorInput label="Error" value={branding.errorColor} onChange={(v: string) => setBranding({ ...branding, errorColor: v })} />
+                    </div>
+                    <div className="col-6">
+                      <ColorInput label="Warning" value={branding.warningColor} onChange={(v: string) => setBranding({ ...branding, warningColor: v })} />
+                    </div>
+                    <div className="col-6">
+                      <ColorInput label="Success" value={branding.successColor} onChange={(v: string) => setBranding({ ...branding, successColor: v })} />
+                    </div>
+                    <div className="col-6">
+                      <ColorInput label="Info" value={branding.infoColor} onChange={(v: string) => setBranding({ ...branding, infoColor: v })} />
+                    </div>
                   </div>
-                  <Input
-                    placeholder="Or enter background URL"
-                    value={branding.dashboardBackgroundUrl}
-                    onChange={(e) => setBranding({ ...branding, dashboardBackgroundUrl: e.target.value })}
-                  />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Colors Tab */}
-        <TabsContent value="colors">
-          <div className="grid grid-cols-2 gap-6">
-            {/* Light Mode */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Light Mode Colors</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ColorInput
-                  label="Primary Color"
-                  value={branding.primaryColor}
-                  onChange={(v) => setBranding({ ...branding, primaryColor: v })}
-                />
-                <ColorInput
-                  label="Secondary Color"
-                  value={branding.secondaryColor}
-                  onChange={(v) => setBranding({ ...branding, secondaryColor: v })}
-                />
-                <ColorInput
-                  label="Accent Color"
-                  value={branding.accentColor}
-                  onChange={(v) => setBranding({ ...branding, accentColor: v })}
-                />
-                <ColorInput
-                  label="Background"
-                  value={branding.backgroundColor}
-                  onChange={(v) => setBranding({ ...branding, backgroundColor: v })}
-                />
-                <ColorInput
-                  label="Surface"
-                  value={branding.surfaceColor}
-                  onChange={(v) => setBranding({ ...branding, surfaceColor: v })}
-                />
-                <ColorInput
-                  label="Text"
-                  value={branding.textColor}
-                  onChange={(v) => setBranding({ ...branding, textColor: v })}
-                />
-                <ColorInput
-                  label="Text Muted"
-                  value={branding.textMutedColor}
-                  onChange={(v) => setBranding({ ...branding, textMutedColor: v })}
-                />
-                <ColorInput
-                  label="Border"
-                  value={branding.borderColor}
-                  onChange={(v) => setBranding({ ...branding, borderColor: v })}
-                />
-                <div className="pt-4 border-t">
-                  <h4 className="font-medium mb-3">Status Colors</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <ColorInput
-                      label="Error"
-                      value={branding.errorColor}
-                      onChange={(v) => setBranding({ ...branding, errorColor: v })}
-                    />
-                    <ColorInput
-                      label="Warning"
-                      value={branding.warningColor}
-                      onChange={(v) => setBranding({ ...branding, warningColor: v })}
-                    />
-                    <ColorInput
-                      label="Success"
-                      value={branding.successColor}
-                      onChange={(v) => setBranding({ ...branding, successColor: v })}
-                    />
-                    <ColorInput
-                      label="Info"
-                      value={branding.infoColor}
-                      onChange={(v) => setBranding({ ...branding, infoColor: v })}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
 
             {/* Dark Mode */}
-            <Card className="bg-slate-900 text-white">
-              <CardHeader>
-                <CardTitle className="text-white">Dark Mode Colors</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ColorInput
-                  label="Primary Color"
-                  value={branding.darkPrimaryColor}
-                  onChange={(v) => setBranding({ ...branding, darkPrimaryColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Secondary Color"
-                  value={branding.darkSecondaryColor}
-                  onChange={(v) => setBranding({ ...branding, darkSecondaryColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Accent Color"
-                  value={branding.darkAccentColor}
-                  onChange={(v) => setBranding({ ...branding, darkAccentColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Background"
-                  value={branding.darkBackgroundColor}
-                  onChange={(v) => setBranding({ ...branding, darkBackgroundColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Surface"
-                  value={branding.darkSurfaceColor}
-                  onChange={(v) => setBranding({ ...branding, darkSurfaceColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Text"
-                  value={branding.darkTextColor}
-                  onChange={(v) => setBranding({ ...branding, darkTextColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Text Muted"
-                  value={branding.darkTextMutedColor}
-                  onChange={(v) => setBranding({ ...branding, darkTextMutedColor: v })}
-                  darkMode
-                />
-                <ColorInput
-                  label="Border"
-                  value={branding.darkBorderColor}
-                  onChange={(v) => setBranding({ ...branding, darkBorderColor: v })}
-                  darkMode
-                />
-              </CardContent>
-            </Card>
+            <div className="col-md-6">
+              <div className="card h-100 bg-dark text-white">
+                <div className="card-header bg-dark border-secondary">
+                  <h5 className="card-title mb-0 text-white">Dark Mode Colors</h5>
+                </div>
+                <div className="card-body">
+                  <ColorInput label="Primary Color" value={branding.darkPrimaryColor} onChange={(v: string) => setBranding({ ...branding, darkPrimaryColor: v })} darkMode />
+                  <ColorInput label="Secondary Color" value={branding.darkSecondaryColor} onChange={(v: string) => setBranding({ ...branding, darkSecondaryColor: v })} darkMode />
+                  <ColorInput label="Accent Color" value={branding.darkAccentColor} onChange={(v: string) => setBranding({ ...branding, darkAccentColor: v })} darkMode />
+                  <ColorInput label="Background" value={branding.darkBackgroundColor} onChange={(v: string) => setBranding({ ...branding, darkBackgroundColor: v })} darkMode />
+                  <ColorInput label="Surface" value={branding.darkSurfaceColor} onChange={(v: string) => setBranding({ ...branding, darkSurfaceColor: v })} darkMode />
+                  <ColorInput label="Text" value={branding.darkTextColor} onChange={(v: string) => setBranding({ ...branding, darkTextColor: v })} darkMode />
+                  <ColorInput label="Text Muted" value={branding.darkTextMutedColor} onChange={(v: string) => setBranding({ ...branding, darkTextMutedColor: v })} darkMode />
+                  <ColorInput label="Border" value={branding.darkBorderColor} onChange={(v: string) => setBranding({ ...branding, darkBorderColor: v })} darkMode />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Live Preview */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Live Preview</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="card mt-4">
+            <div className="card-header">
+              <h5 className="card-title mb-0">Live Preview</h5>
+            </div>
+            <div className="card-body">
               <div
-                className="rounded-lg p-6 space-y-4"
+                className="rounded p-4"
                 style={{
                   backgroundColor: previewMode === 'light' ? branding.backgroundColor : branding.darkBackgroundColor,
                   color: previewMode === 'light' ? branding.textColor : branding.darkTextColor,
                 }}
               >
                 <div
-                  className="rounded-lg p-4"
+                  className="rounded p-3 mb-3"
                   style={{
                     backgroundColor: previewMode === 'light' ? branding.surfaceColor : branding.darkSurfaceColor,
                     borderColor: previewMode === 'light' ? branding.borderColor : branding.darkBorderColor,
                     borderWidth: 1,
+                    borderStyle: 'solid',
                   }}
                 >
-                  <h3 className="font-bold text-lg" style={{
+                  <h3 className="fw-bold fs-5 mb-2" style={{
                     color: previewMode === 'light' ? branding.primaryColor : branding.darkPrimaryColor
                   }}>
                     Sample Report Card
                   </h3>
-                  <p style={{
+                  <p className="mb-3" style={{
                     color: previewMode === 'light' ? branding.textMutedColor : branding.darkTextMutedColor
                   }}>
                     This is how your content will look with the selected theme.
                   </p>
-                  <div className="flex gap-2 mt-4">
+                  <div className="d-flex gap-2">
                     <button
-                      className="px-4 py-2 rounded text-white"
+                      className="btn btn-sm text-white"
                       style={{ backgroundColor: previewMode === 'light' ? branding.primaryColor : branding.darkPrimaryColor }}
                     >
                       Primary Button
                     </button>
                     <button
-                      className="px-4 py-2 rounded text-white"
+                      className="btn btn-sm text-white"
                       style={{ backgroundColor: previewMode === 'light' ? branding.secondaryColor : branding.darkSecondaryColor }}
                     >
                       Secondary
                     </button>
                     <button
-                      className="px-4 py-2 rounded text-white"
+                      className="btn btn-sm text-white"
                       style={{ backgroundColor: previewMode === 'light' ? branding.accentColor : branding.darkAccentColor }}
                     >
                       Accent
@@ -511,280 +515,272 @@ export function OrganizationPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-4">
-                  <div className="px-3 py-1 rounded text-white text-sm" style={{ backgroundColor: branding.successColor }}>
-                    Success
-                  </div>
-                  <div className="px-3 py-1 rounded text-white text-sm" style={{ backgroundColor: branding.warningColor }}>
-                    Warning
-                  </div>
-                  <div className="px-3 py-1 rounded text-white text-sm" style={{ backgroundColor: branding.errorColor }}>
-                    Error
-                  </div>
-                  <div className="px-3 py-1 rounded text-white text-sm" style={{ backgroundColor: branding.infoColor }}>
-                    Info
-                  </div>
+                <div className="d-flex gap-2">
+                  <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.successColor }}>Success</span>
+                  <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.warningColor }}>Warning</span>
+                  <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.errorColor }}>Error</span>
+                  <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.infoColor }}>Info</span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          </div>
+        </>
+      )}
 
-        {/* Typography Tab */}
-        <TabsContent value="typography">
-          <Card>
-            <CardHeader>
-              <CardTitle>Typography Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-3 gap-6">
-                <div>
-                  <Label>Body Font Family</Label>
-                  <Input
-                    value={branding.fontFamily}
-                    onChange={(e) => setBranding({ ...branding, fontFamily: e.target.value })}
-                  />
-                  <p className="text-sm text-muted-foreground mt-2" style={{ fontFamily: branding.fontFamily }}>
-                    The quick brown fox jumps over the lazy dog.
-                  </p>
-                </div>
-                <div>
-                  <Label>Heading Font Family</Label>
-                  <Input
-                    value={branding.headingFontFamily}
-                    onChange={(e) => setBranding({ ...branding, headingFontFamily: e.target.value })}
-                  />
-                  <h4 className="text-lg font-bold mt-2" style={{ fontFamily: branding.headingFontFamily }}>
-                    Sample Heading Text
-                  </h4>
-                </div>
-                <div>
-                  <Label>Monospace Font Family</Label>
-                  <Input
-                    value={branding.monoFontFamily}
-                    onChange={(e) => setBranding({ ...branding, monoFontFamily: e.target.value })}
-                  />
-                  <code className="text-sm mt-2 block" style={{ fontFamily: branding.monoFontFamily }}>
-                    SELECT * FROM users;
-                  </code>
-                </div>
-              </div>
-
-              <div>
-                <Label>Custom CSS (Advanced)</Label>
-                <textarea
-                  className="w-full h-40 mt-2 p-3 font-mono text-sm border rounded-lg"
-                  placeholder={`/* Custom CSS overrides */
-.sidebar { background: #custom; }
-.report-title { font-size: 2rem; }`}
-                  value={branding.customCss}
-                  onChange={(e) => setBranding({ ...branding, customCss: e.target.value })}
+      {/* Typography Tab */}
+      {activeTab === 'typography' && (
+        <div className="card">
+          <div className="card-header">
+            <h5 className="card-title mb-0">Typography Settings</h5>
+          </div>
+          <div className="card-body">
+            <div className="row g-4 mb-4">
+              <div className="col-md-4">
+                <label className="form-label">Body Font Family</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={branding.fontFamily}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, fontFamily: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Advanced users can add custom CSS to override default styles.
+                <p className="text-muted mt-2 mb-0 small" style={{ fontFamily: branding.fontFamily }}>
+                  The quick brown fox jumps over the lazy dog.
                 </p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <div className="col-md-4">
+                <label className="form-label">Heading Font Family</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={branding.headingFontFamily}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, headingFontFamily: e.target.value })}
+                />
+                <h4 className="fw-bold mt-2" style={{ fontFamily: branding.headingFontFamily }}>
+                  Sample Heading Text
+                </h4>
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Monospace Font Family</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={branding.monoFontFamily}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, monoFontFamily: e.target.value })}
+                />
+                <code className="d-block mt-2 small" style={{ fontFamily: branding.monoFontFamily }}>
+                  SELECT * FROM users;
+                </code>
+              </div>
+            </div>
 
-        {/* Settings Tab */}
-        <TabsContent value="settings">
-          <div className="grid grid-cols-2 gap-6">
-            {/* Authentication */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Authentication</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Allow Local Users</Label>
-                    <p className="text-xs text-muted-foreground">Users can register with email/password</p>
-                  </div>
-                  <Switch
-                    checked={settings.allowLocalUsers}
-                    onCheckedChange={(v) => setSettings({ ...settings, allowLocalUsers: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Allow Microsoft Entra ID</Label>
-                    <p className="text-xs text-muted-foreground">SSO with Azure AD</p>
-                  </div>
-                  <Switch
-                    checked={settings.allowEntraId}
-                    onCheckedChange={(v) => setSettings({ ...settings, allowEntraId: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Require MFA</Label>
-                    <p className="text-xs text-muted-foreground">Multi-factor authentication</p>
-                  </div>
-                  <Switch
-                    checked={settings.requireMfa}
-                    onCheckedChange={(v) => setSettings({ ...settings, requireMfa: v })}
-                  />
-                </div>
-                <div>
-                  <Label>Session Timeout (minutes)</Label>
-                  <Input
-                    type="number"
-                    value={settings.sessionTimeoutMinutes}
-                    onChange={(e) => setSettings({ ...settings, sessionTimeoutMinutes: parseInt(e.target.value) })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Features */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Feature Toggles</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Data Upload</Label>
-                  <Switch
-                    checked={settings.enableDataUpload}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableDataUpload: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Query Playground</Label>
-                  <Switch
-                    checked={settings.enableQueryPlayground}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableQueryPlayground: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Report Builder</Label>
-                  <Switch
-                    checked={settings.enableReportBuilder}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableReportBuilder: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>AI Assistant</Label>
-                  <Switch
-                    checked={settings.enableAiAssistant}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableAiAssistant: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Export to PDF</Label>
-                  <Switch
-                    checked={settings.enableExportPdf}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableExportPdf: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Export to Excel</Label>
-                  <Switch
-                    checked={settings.enableExportExcel}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableExportExcel: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Report Embedding</Label>
-                  <Switch
-                    checked={settings.enableEmbedding}
-                    onCheckedChange={(v) => setSettings({ ...settings, enableEmbedding: v })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Limits */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Limits</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Max Connections per Group</Label>
-                  <Input
-                    type="number"
-                    value={settings.maxConnectionsPerGroup}
-                    onChange={(e) => setSettings({ ...settings, maxConnectionsPerGroup: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label>Max Reports per Group</Label>
-                  <Input
-                    type="number"
-                    value={settings.maxReportsPerGroup}
-                    onChange={(e) => setSettings({ ...settings, maxReportsPerGroup: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label>Max Query Result Rows</Label>
-                  <Input
-                    type="number"
-                    value={settings.maxQueryResultRows}
-                    onChange={(e) => setSettings({ ...settings, maxQueryResultRows: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label>Max Upload Size (MB)</Label>
-                  <Input
-                    type="number"
-                    value={settings.maxUploadSizeMb}
-                    onChange={(e) => setSettings({ ...settings, maxUploadSizeMb: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label>Temp Data Retention (hours)</Label>
-                  <Input
-                    type="number"
-                    value={settings.tempDataRetentionHours}
-                    onChange={(e) => setSettings({ ...settings, tempDataRetentionHours: parseInt(e.target.value) })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Default Permissions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Default Group Permissions</CardTitle>
-                <p className="text-sm text-muted-foreground">Defaults for newly created groups</p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Can Create Reports</Label>
-                  <Switch
-                    checked={settings.defaultCanCreateReports}
-                    onCheckedChange={(v) => setSettings({ ...settings, defaultCanCreateReports: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Can Create Connections</Label>
-                  <Switch
-                    checked={settings.defaultCanCreateConnections}
-                    onCheckedChange={(v) => setSettings({ ...settings, defaultCanCreateConnections: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Can Upload Data</Label>
-                  <Switch
-                    checked={settings.defaultCanUploadData}
-                    onCheckedChange={(v) => setSettings({ ...settings, defaultCanUploadData: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>Can Export</Label>
-                  <Switch
-                    checked={settings.defaultCanExport}
-                    onCheckedChange={(v) => setSettings({ ...settings, defaultCanExport: v })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <div>
+              <label className="form-label">Custom CSS (Advanced)</label>
+              <textarea
+                className="form-control font-monospace"
+                rows={8}
+                placeholder={`/* Custom CSS overrides */\n.sidebar { background: #custom; }\n.report-title { font-size: 2rem; }`}
+                value={branding.customCss}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBranding({ ...branding, customCss: e.target.value })}
+              />
+              <div className="form-text">
+                Advanced users can add custom CSS to override default styles.
+              </div>
+            </div>
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && (
+        <div className="row g-4">
+          {/* Authentication */}
+          <div className="col-md-6">
+            <div className="card h-100">
+              <div className="card-header">
+                <h5 className="card-title mb-0">Authentication</h5>
+              </div>
+              <div className="card-body">
+                <SettingSwitch
+                  id="allowLocalUsers"
+                  label="Allow Local Users"
+                  description="Users can register with email/password"
+                  checked={settings.allowLocalUsers}
+                  onChange={(v: boolean) => setSettings({ ...settings, allowLocalUsers: v })}
+                />
+                <SettingSwitch
+                  id="allowEntraId"
+                  label="Allow Microsoft Entra ID"
+                  description="SSO with Azure AD"
+                  checked={settings.allowEntraId}
+                  onChange={(v: boolean) => setSettings({ ...settings, allowEntraId: v })}
+                />
+                <SettingSwitch
+                  id="requireMfa"
+                  label="Require MFA"
+                  description="Multi-factor authentication"
+                  checked={settings.requireMfa}
+                  onChange={(v: boolean) => setSettings({ ...settings, requireMfa: v })}
+                />
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="sessionTimeout">Session Timeout (minutes)</label>
+                  <input
+                    id="sessionTimeout"
+                    type="number"
+                    className="form-control"
+                    value={settings.sessionTimeoutMinutes}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, sessionTimeoutMinutes: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="col-md-6">
+            <div className="card h-100">
+              <div className="card-header">
+                <h5 className="card-title mb-0">Feature Toggles</h5>
+              </div>
+              <div className="card-body">
+                <SettingSwitch
+                  id="enableDataUpload"
+                  label="Data Upload"
+                  checked={settings.enableDataUpload}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableDataUpload: v })}
+                />
+                <SettingSwitch
+                  id="enableQueryPlayground"
+                  label="Query Playground"
+                  checked={settings.enableQueryPlayground}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableQueryPlayground: v })}
+                />
+                <SettingSwitch
+                  id="enableReportBuilder"
+                  label="Report Builder"
+                  checked={settings.enableReportBuilder}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableReportBuilder: v })}
+                />
+                <SettingSwitch
+                  id="enableAiAssistant"
+                  label="AI Assistant"
+                  checked={settings.enableAiAssistant}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableAiAssistant: v })}
+                />
+                <SettingSwitch
+                  id="enableExportPdf"
+                  label="Export to PDF"
+                  checked={settings.enableExportPdf}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableExportPdf: v })}
+                />
+                <SettingSwitch
+                  id="enableExportExcel"
+                  label="Export to Excel"
+                  checked={settings.enableExportExcel}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableExportExcel: v })}
+                />
+                <SettingSwitch
+                  id="enableEmbedding"
+                  label="Report Embedding"
+                  checked={settings.enableEmbedding}
+                  onChange={(v: boolean) => setSettings({ ...settings, enableEmbedding: v })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Limits */}
+          <div className="col-md-6">
+            <div className="card h-100">
+              <div className="card-header">
+                <h5 className="card-title mb-0">Limits</h5>
+              </div>
+              <div className="card-body">
+                <div className="mb-3">
+                  <label className="form-label">Max Connections per Group</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.maxConnectionsPerGroup}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, maxConnectionsPerGroup: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Max Reports per Group</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.maxReportsPerGroup}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, maxReportsPerGroup: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Max Query Result Rows</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.maxQueryResultRows}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, maxQueryResultRows: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Max Upload Size (MB)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.maxUploadSizeMb}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, maxUploadSizeMb: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Temp Data Retention (hours)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.tempDataRetentionHours}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, tempDataRetentionHours: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Default Permissions */}
+          <div className="col-md-6">
+            <div className="card h-100">
+              <div className="card-header">
+                <h5 className="card-title mb-0">Default Group Permissions</h5>
+                <small className="text-muted">Defaults for newly created groups</small>
+              </div>
+              <div className="card-body">
+                <SettingSwitch
+                  id="defaultCanCreateReports"
+                  label="Can Create Reports"
+                  checked={settings.defaultCanCreateReports}
+                  onChange={(v: boolean) => setSettings({ ...settings, defaultCanCreateReports: v })}
+                />
+                <SettingSwitch
+                  id="defaultCanCreateConnections"
+                  label="Can Create Connections"
+                  checked={settings.defaultCanCreateConnections}
+                  onChange={(v: boolean) => setSettings({ ...settings, defaultCanCreateConnections: v })}
+                />
+                <SettingSwitch
+                  id="defaultCanUploadData"
+                  label="Can Upload Data"
+                  checked={settings.defaultCanUploadData}
+                  onChange={(v: boolean) => setSettings({ ...settings, defaultCanUploadData: v })}
+                />
+                <SettingSwitch
+                  id="defaultCanExport"
+                  label="Can Export"
+                  checked={settings.defaultCanExport}
+                  onChange={(v: boolean) => setSettings({ ...settings, defaultCanExport: v })}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

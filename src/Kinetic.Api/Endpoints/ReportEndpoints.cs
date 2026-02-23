@@ -1,7 +1,11 @@
+using Kinetic.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using Kinetic.Api.Services;
 using Kinetic.Core.Domain;
 using Kinetic.Core.Domain.Reports;
+using Kinetic.Queue.Messages;
+using MassTransit;
 
 namespace Kinetic.Api.Endpoints;
 
@@ -39,6 +43,16 @@ public static class ReportEndpoints
         // Categories
         group.MapGet("/categories", GetCategories).WithName("GetCategories");
         group.MapPost("/categories", CreateCategory).WithName("CreateCategory");
+
+        // Execution history
+        group.MapGet("/{id:guid}/history", GetReportHistory)
+            .WithName("GetReportHistory")
+            .Produces<List<QueryExecutionLogDto>>();
+
+        // Scheduled execution
+        group.MapPost("/{id:guid}/schedule", ScheduleReport)
+            .WithName("ScheduleReport")
+            .Produces(202);
     }
 
     private static async Task<IResult> GetReports(
@@ -48,6 +62,7 @@ public static class ReportEndpoints
         [FromQuery] string? search,
         [FromQuery] bool? ownedByMe,
         [FromQuery] Guid? connectionId,
+        [FromQuery] string? q,
         HttpContext context,
         IReportService reportService)
     {
@@ -59,7 +74,8 @@ public static class ReportEndpoints
             CategoryId = categoryId,
             Search = search,
             OwnedByMe = ownedByMe ?? false,
-            ConnectionId = connectionId
+            ConnectionId = connectionId,
+            Q = q
         };
 
         var p = page ?? 1;
@@ -109,7 +125,8 @@ public static class ReportEndpoints
             CacheTtlSeconds = request.CacheTtlSeconds,
             CategoryId = request.CategoryId,
             Tags = request.Tags,
-            Visibility = request.Visibility ?? Visibility.Private
+            Visibility = request.Visibility ?? Visibility.Private,
+            RowFilterExpression = request.RowFilterExpression
         };
 
         var report = await reportService.CreateAsync(createRequest, userId.Value);
@@ -134,7 +151,8 @@ public static class ReportEndpoints
             CacheTtlSeconds = request.CacheTtlSeconds,
             CategoryId = request.CategoryId,
             Tags = request.Tags,
-            Visibility = request.Visibility
+            Visibility = request.Visibility,
+            RowFilterExpression = request.RowFilterExpression
         };
 
         var report = await reportService.UpdateAsync(id, updateRequest);
@@ -238,6 +256,56 @@ public static class ReportEndpoints
         return Results.Created($"/api/reports/categories/{category.Id}", MapCategory(category));
     }
 
+    private static async Task<IResult> GetReportHistory(
+        Guid id,
+        KineticDbContext db,
+        HttpContext context,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        var logs = await db.QueryExecutionLogs
+            .Where(l => l.ReportId == id)
+            .OrderByDescending(l => l.ExecutedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(l => new QueryExecutionLogDto
+            {
+                Id = l.Id,
+                UserId = l.UserId,
+                Success = l.Success,
+                RowsReturned = l.RowsReturned,
+                DurationMs = l.DurationMs,
+                ErrorMessage = l.ErrorMessage,
+                WasCached = l.WasCached,
+                ExecutedAt = l.ExecutedAt
+            })
+            .ToListAsync();
+
+        return Results.Ok(logs);
+    }
+
+    private static async Task<IResult> ScheduleReport(
+        Guid id,
+        [FromBody] ScheduleReportRequest request,
+        IPublishEndpoint publishEndpoint,
+        HttpContext context)
+    {
+        var userIdClaim = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+            return Results.Unauthorized();
+
+        await publishEndpoint.Publish(new ScheduledReportMessage
+        {
+            ReportId = id,
+            UserId = userId,
+            Parameters = request.Parameters ?? new(),
+            ScheduledFor = request.ScheduledFor ?? DateTime.UtcNow
+        });
+
+        return Results.Accepted();
+    }
+
     private static Guid? GetUserId(HttpContext context)
     {
         var userIdClaim = context.User.FindFirst("sub")?.Value;
@@ -285,6 +353,7 @@ public static class ReportEndpoints
         ownerType = report.OwnerType.ToString(),
         ownerId = report.OwnerId,
         visibility = report.Visibility.ToString(),
+        rowFilterExpression = report.RowFilterExpression,
         executionCount = report.ExecutionCount,
         lastExecutedAt = report.LastExecutedAt,
         createdAt = report.CreatedAt,
@@ -317,6 +386,7 @@ public class CreateReportApiRequest
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }
+    public string? RowFilterExpression { get; set; }
 }
 
 public class UpdateReportApiRequest
@@ -333,6 +403,7 @@ public class UpdateReportApiRequest
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }
+    public string? RowFilterExpression { get; set; }
 }
 
 public class DetectColumnsRequest
@@ -346,4 +417,22 @@ public class CreateCategoryRequest
     public required string Name { get; set; }
     public string? Description { get; set; }
     public Guid? ParentId { get; set; }
+}
+
+public record QueryExecutionLogDto
+{
+    public Guid Id { get; init; }
+    public Guid UserId { get; init; }
+    public bool Success { get; init; }
+    public int RowsReturned { get; init; }
+    public int DurationMs { get; init; }
+    public string? ErrorMessage { get; init; }
+    public bool WasCached { get; init; }
+    public DateTime ExecutedAt { get; init; }
+}
+
+public record ScheduleReportRequest
+{
+    public Dictionary<string, object?>? Parameters { get; init; }
+    public DateTime? ScheduledFor { get; init; }
 }

@@ -54,3 +54,4 @@ resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
 
 output storageAccountName string = storage.name
 output connectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+output id string = storage.id

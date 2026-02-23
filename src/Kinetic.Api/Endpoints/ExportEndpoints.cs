@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Kinetic.Api.Services;
 using Kinetic.Core.Services.Export;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,6 +30,11 @@ public static class ExportEndpoints
             .WithDescription("Export data to CSV format")
             .Produces<FileContentResult>(StatusCodes.Status200OK, "text/csv")
             .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/csv/stream", StreamCsvExport)
+            .WithName("StreamCsvExport")
+            .WithDescription("Stream large datasets as CSV without loading into memory")
+            .Produces(StatusCodes.Status200OK, contentType: "text/csv");
     }
 
     private static async Task<IResult> ExportToExcel(
@@ -74,6 +80,62 @@ public static class ExportEndpoints
             return Results.BadRequest(new { error = result.Error });
         
         return Results.File(result.Data!, result.ContentType!, result.FileName);
+    }
+
+    private static async Task StreamCsvExport(
+        [FromBody] StreamCsvExportRequest request,
+        IQueryService queryService,
+        HttpContext context)
+    {
+        context.Response.ContentType = "text/csv";
+        context.Response.Headers.ContentDisposition =
+            $"attachment; filename=\"export_{DateTime.UtcNow:yyyyMMddHHmmss}.csv\"";
+
+        var userIdClaim = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
+
+        await using var writer = new StreamWriter(context.Response.Body, leaveOpen: true);
+
+        var headerWritten = false;
+        var rowCount = 0;
+
+        try
+        {
+            await foreach (var row in queryService.StreamReportAsync(request.ReportId, request.Parameters ?? new(), userId))
+            {
+                if (!headerWritten)
+                {
+                    await writer.WriteLineAsync(string.Join(",", row.Keys.Select(k => EscapeCsv(k))));
+                    headerWritten = true;
+                }
+                await writer.WriteLineAsync(string.Join(",", row.Values.Select(v => EscapeCsv(v?.ToString()))));
+                rowCount++;
+
+                // Flush periodically to enable streaming
+                if (rowCount % 1000 == 0)
+                    await writer.FlushAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // Already started streaming, cannot change status code
+            await writer.WriteLineAsync("# ERROR: Export interrupted");
+        }
+
+        await writer.FlushAsync();
+    }
+
+    private static string EscapeCsv(string? value)
+    {
+        if (value == null) return "";
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        return value;
     }
 
     private static ExportRequest MapToRequest(ExportRequestDto dto, ClaimsPrincipal user)
@@ -130,6 +192,12 @@ public class ExportColumnDto
     public string? Format { get; set; }
     public string? Alignment { get; set; }
     public int? Width { get; set; }
+}
+
+public class StreamCsvExportRequest
+{
+    public Guid ReportId { get; set; }
+    public Dictionary<string, object?>? Parameters { get; set; }
 }
 
 public class ExportOptionsDto

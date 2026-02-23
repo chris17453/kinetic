@@ -189,17 +189,32 @@ public class ConnectionService : IConnectionService
 
     private string EncryptConnectionString(string plainText)
     {
-        using var aes = Aes.Create();
-        aes.Key = Encoding.UTF8.GetBytes(_encryptionKey.PadRight(32).Substring(0, 32));
-        aes.GenerateIV();
-
-        using var encryptor = aes.CreateEncryptor();
         var plainBytes = Encoding.UTF8.GetBytes(plainText);
-        var encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
 
-        var result = new byte[aes.IV.Length + encryptedBytes.Length];
-        Buffer.BlockCopy(aes.IV, 0, result, 0, aes.IV.Length);
-        Buffer.BlockCopy(encryptedBytes, 0, result, aes.IV.Length, encryptedBytes.Length);
+        // Random salt for key derivation
+        var salt = new byte[16];
+        RandomNumberGenerator.Fill(salt);
+
+        // Derive 32-byte key via PBKDF2-SHA256
+        using var kdf = new Rfc2898DeriveBytes(
+            Encoding.UTF8.GetBytes(_encryptionKey), salt, 100_000, HashAlgorithmName.SHA256);
+        var key = kdf.GetBytes(32);
+
+        // AES-GCM encryption
+        var nonce = new byte[AesGcm.NonceByteSizes.MaxSize]; // 12 bytes
+        RandomNumberGenerator.Fill(nonce);
+        var ciphertext = new byte[plainBytes.Length];
+        var tag = new byte[AesGcm.TagByteSizes.MaxSize]; // 16 bytes
+
+        using var aesGcm = new AesGcm(key, AesGcm.TagByteSizes.MaxSize);
+        aesGcm.Encrypt(nonce, plainBytes, ciphertext, tag);
+
+        // Layout: salt[16] | nonce[12] | tag[16] | ciphertext
+        var result = new byte[salt.Length + nonce.Length + tag.Length + ciphertext.Length];
+        Buffer.BlockCopy(salt, 0, result, 0, salt.Length);
+        Buffer.BlockCopy(nonce, 0, result, salt.Length, nonce.Length);
+        Buffer.BlockCopy(tag, 0, result, salt.Length + nonce.Length, tag.Length);
+        Buffer.BlockCopy(ciphertext, 0, result, salt.Length + nonce.Length + tag.Length, ciphertext.Length);
 
         return Convert.ToBase64String(result);
     }
@@ -207,21 +222,32 @@ public class ConnectionService : IConnectionService
     private string Decrypt(string encrypted)
     {
         var fullBytes = Convert.FromBase64String(encrypted);
-        
-        using var aes = Aes.Create();
-        aes.Key = Encoding.UTF8.GetBytes(_encryptionKey.PadRight(32).Substring(0, 32));
 
-        var iv = new byte[16];
-        var encryptedBytes = new byte[fullBytes.Length - 16];
-        Buffer.BlockCopy(fullBytes, 0, iv, 0, 16);
-        Buffer.BlockCopy(fullBytes, 16, encryptedBytes, 0, encryptedBytes.Length);
+        // Layout: salt[16] | nonce[12] | tag[16] | ciphertext
+        const int saltLen = 16;
+        const int nonceLen = 12;
+        const int tagLen = 16;
+        var ciphertextLen = fullBytes.Length - saltLen - nonceLen - tagLen;
 
-        aes.IV = iv;
+        if (ciphertextLen < 0)
+            throw new CryptographicException("Invalid encrypted data format.");
 
-        using var decryptor = aes.CreateDecryptor();
-        var decryptedBytes = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
+        var salt = fullBytes[..saltLen];
+        var nonce = fullBytes[saltLen..(saltLen + nonceLen)];
+        var tag = fullBytes[(saltLen + nonceLen)..(saltLen + nonceLen + tagLen)];
+        var ciphertext = fullBytes[(saltLen + nonceLen + tagLen)..];
 
-        return Encoding.UTF8.GetString(decryptedBytes);
+        // Re-derive key
+        using var kdf = new Rfc2898DeriveBytes(
+            Encoding.UTF8.GetBytes(_encryptionKey), salt, 100_000, HashAlgorithmName.SHA256);
+        var key = kdf.GetBytes(32);
+
+        // AES-GCM decryption (authenticates tag automatically)
+        var plaintext = new byte[ciphertextLen];
+        using var aesGcm = new AesGcm(key, tagLen);
+        aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+
+        return Encoding.UTF8.GetString(plaintext);
     }
 }
 

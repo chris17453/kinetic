@@ -12,6 +12,8 @@ param entraIdTenantId string
 param entraIdClientId string
 @secure()
 param entraIdClientSecret string
+@description('Application Insights connection string')
+param appInsightsConnectionString string = ''
 param tags object
 
 var appName = 'ca-${baseName}-api-${environment}'
@@ -63,6 +65,10 @@ resource apiApp 'Microsoft.App/containerApps@2023-05-01' = {
             { name: 'EntraId__TenantId', value: entraIdTenantId }
             { name: 'EntraId__ClientId', value: entraIdClientId }
             { name: 'EntraId__ClientSecret', secretRef: 'entra-client-secret' }
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: appInsightsConnectionString
+            }
           ]
           probes: [
             {
@@ -106,3 +112,4 @@ resource apiApp 'Microsoft.App/containerApps@2023-05-01' = {
 
 output url string = 'https://${apiApp.properties.configuration.ingress.fqdn}'
 output name string = apiApp.name
+output fqdn string = apiApp.properties.configuration.ingress.fqdn

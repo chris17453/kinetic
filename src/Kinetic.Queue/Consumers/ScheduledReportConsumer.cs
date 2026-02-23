@@ -1,23 +1,77 @@
+using Kinetic.Core.Reports;
 using Kinetic.Queue.Messages;
 using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Kinetic.Queue.Consumers;
 
-public class ScheduledReportConsumer : IConsumer<TriggerScheduledReports>
+/// <summary>
+/// Consumes <see cref="ScheduledReportMessage"/> messages and executes the referenced report
+/// directly via <see cref="IReportExecutionService"/>. MassTransit will handle retries on failure.
+/// </summary>
+public class ScheduledReportConsumer : IConsumer<ScheduledReportMessage>
 {
-    private readonly IScheduledReportService _scheduledReportService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScheduledReportConsumer> _logger;
-    private readonly IBus _bus;
 
     public ScheduledReportConsumer(
+        IServiceScopeFactory scopeFactory,
+        ILogger<ScheduledReportConsumer> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+    }
+
+    public async Task Consume(ConsumeContext<ScheduledReportMessage> context)
+    {
+        var message = context.Message;
+        _logger.LogInformation(
+            "Executing scheduled report {ReportId} for user {UserId} (scheduled for {ScheduledFor})",
+            message.ReportId, message.UserId, message.ScheduledFor);
+
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var executionService = scope.ServiceProvider.GetRequiredService<IReportExecutionService>();
+
+            var result = await executionService.ExecuteAsync(
+                message.ReportId,
+                message.UserId,
+                message.Parameters,
+                cacheResults: true,
+                ct: context.CancellationToken);
+
+            _logger.LogInformation(
+                "Scheduled report {ReportId} completed: {Rows} rows in {Ms}ms",
+                message.ReportId, result.RowCount, result.ExecutionTime.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error executing scheduled report {ReportId}", message.ReportId);
+            throw; // Let MassTransit handle retry
+        }
+    }
+}
+
+/// <summary>
+/// Consumes <see cref="TriggerScheduledReports"/> to find all due scheduled reports and
+/// publish individual <see cref="ScheduledReportMessage"/> messages for each one.
+/// </summary>
+public class TriggerScheduledReportsConsumer : IConsumer<TriggerScheduledReports>
+{
+    private readonly IScheduledReportService _scheduledReportService;
+    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<TriggerScheduledReportsConsumer> _logger;
+
+    public TriggerScheduledReportsConsumer(
         IScheduledReportService scheduledReportService,
-        ILogger<ScheduledReportConsumer> logger,
-        IBus bus)
+        IPublishEndpoint publishEndpoint,
+        ILogger<TriggerScheduledReportsConsumer> logger)
     {
         _scheduledReportService = scheduledReportService;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
-        _bus = bus;
     }
 
     public async Task Consume(ConsumeContext<TriggerScheduledReports> context)
@@ -30,14 +84,12 @@ public class ScheduledReportConsumer : IConsumer<TriggerScheduledReports>
 
         foreach (var schedule in dueReports)
         {
-            await _bus.Publish(new ExecuteReportMessage
+            await _publishEndpoint.Publish(new ScheduledReportMessage
             {
                 ReportId = schedule.ReportId,
-                ExecutionId = Guid.NewGuid(),
                 UserId = schedule.OwnerId,
                 Parameters = schedule.DefaultParameters,
-                CacheResults = true,
-                CacheTtlMinutes = schedule.CacheTtlMinutes
+                ScheduledFor = context.Message.TriggerTime
             });
 
             await _scheduledReportService.MarkExecutedAsync(schedule.Id, context.CancellationToken);

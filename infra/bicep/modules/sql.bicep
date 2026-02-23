@@ -7,6 +7,9 @@ param adminUsername string
 param adminPassword string
 param tags object
 
+@allowed(['dev', 'staging', 'prod'])
+param environmentName string = 'dev'
+
 var serverName = 'sql-${baseName}-${environment}'
 var databaseName = '${baseName}-db'
 
@@ -38,6 +41,15 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-05-01-preview' = {
   }
 }
 
+resource sqlDbShortTermRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2021-11-01' = {
+  name: 'default'
+  parent: sqlDatabase
+  properties: {
+    retentionDays: environmentName == 'prod' ? 35 : 7
+    diffBackupIntervalInHours: 24
+  }
+}
+
 // Allow Azure services
 resource firewallRule 'Microsoft.Sql/servers/firewallRules@2023-05-01-preview' = {
   parent: sqlServer
@@ -51,3 +63,4 @@ resource firewallRule 'Microsoft.Sql/servers/firewallRules@2023-05-01-preview' =
 output serverName string = sqlServer.name
 output databaseName string = sqlDatabase.name
 output connectionString string = 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${databaseName};User Id=${adminUsername};Password=${adminPassword};Encrypt=True;TrustServerCertificate=False;'
+output serverId string = sqlServer.id

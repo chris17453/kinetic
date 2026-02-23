@@ -19,6 +19,7 @@ public class KineticDbContext : DbContext
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<UserGroup> UserGroups => Set<UserGroup>();
     public DbSet<GroupPermission> GroupPermissions => Set<GroupPermission>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     // Connections
     public DbSet<Connection> Connections => Set<Connection>();
@@ -36,6 +37,9 @@ public class KineticDbContext : DbContext
     // Audit
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    // Query Execution
+    public DbSet<QueryExecutionLog> QueryExecutionLogs => Set<QueryExecutionLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -46,6 +50,7 @@ public class KineticDbContext : DbContext
         ConfigureDepartment(modelBuilder);
         ConfigureUserGroup(modelBuilder);
         ConfigureGroupPermission(modelBuilder);
+        ConfigureRefreshToken(modelBuilder);
 
         // Connections
         ConfigureConnection(modelBuilder);
@@ -62,6 +67,7 @@ public class KineticDbContext : DbContext
 
         // Audit
         ConfigureAuditLog(modelBuilder);
+        ConfigureQueryExecutionLog(modelBuilder);
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)
@@ -159,6 +165,25 @@ public class KineticDbContext : DbContext
         });
     }
 
+    private static void ConfigureRefreshToken(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Token).HasMaxLength(256).IsRequired();
+
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.ExpiresAt);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
     private static void ConfigureConnection(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Connection>(entity =>
@@ -186,6 +211,7 @@ public class KineticDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(2048);
             entity.Property(e => e.Slug).HasMaxLength(256).IsRequired();
             entity.Property(e => e.QueryText).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(e => e.RowFilterExpression).HasMaxLength(2048);
             
             // Store complex objects as JSON
             entity.Property(e => e.Parameters).HasColumnType("nvarchar(max)")
@@ -325,6 +351,22 @@ public class KineticDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureQueryExecutionLog(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<QueryExecutionLog>(entity =>
+        {
+            entity.ToTable("QueryExecutionLogs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QueryHash).HasMaxLength(64);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2048);
+
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.ReportId);
+            entity.HasIndex(e => e.ConnectionId);
+            entity.HasIndex(e => e.ExecutedAt);
         });
     }
 }

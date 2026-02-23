@@ -12,6 +12,7 @@ public static class QueryEndpoints
     {
         var group = app.MapGroup("/api/query")
             .WithTags("Query")
+            .RequireRateLimiting("query")
             .RequireAuthorization();
 
         group.MapPost("/execute", ExecuteQuery).WithName("ExecuteQuery");
@@ -19,6 +20,12 @@ public static class QueryEndpoints
         group.MapPost("/stream", StreamQuery).WithName("StreamQuery");
         group.MapPost("/preview", PreviewQuery).WithName("PreviewQuery");
         group.MapDelete("/cache/{queryHash}", InvalidateCache).WithName("InvalidateQueryCache");
+        group.MapDelete("/cache/report/{reportId:guid}", InvalidateReportCache)
+            .WithName("InvalidateReportCache")
+            .Produces(204);
+        group.MapPost("/explain", ExplainQuery)
+            .WithName("ExplainQuery")
+            .Produces<ExplainResultDto>();
     }
 
     private static async Task<IResult> ExecuteQuery(
@@ -92,7 +99,7 @@ public static class QueryEndpoints
         var userId = GetUserId(context);
         if (userId == null) return Results.Unauthorized();
 
-        var result = await queryService.ExecuteReportAsync(reportId, request.Parameters ?? new(), userId.Value);
+        var result = await queryService.ExecuteReportAsync(reportId, request.Parameters ?? new(), userId.Value, request.Page, request.PageSize, request.IncludeTotalCount ?? false);
 
         if (!result.Success)
         {
@@ -208,6 +215,31 @@ public static class QueryEndpoints
         return Results.Ok();
     }
 
+    private static async Task<IResult> InvalidateReportCache(Guid reportId, IQueryService queryService)
+    {
+        await queryService.InvalidateReportCacheAsync(reportId);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ExplainQuery(
+        [FromBody] ExplainQueryRequest request,
+        IQueryService queryService,
+        HttpContext context)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var plan = await queryService.ExplainQueryAsync(request.ConnectionId, request.Query, request.TimeoutSeconds, context.RequestAborted);
+            sw.Stop();
+            return Results.Ok(new ExplainResultDto { Plan = plan, ExecutionTimeMs = sw.ElapsedMilliseconds });
+        }
+        catch (InvalidOperationException ex)
+        {
+            sw.Stop();
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static Guid? GetUserId(HttpContext context)
     {
         var userIdClaim = context.User.FindFirst("sub")?.Value;
@@ -242,6 +274,9 @@ public class ExecuteQueryApiRequest
 public class ExecuteReportApiRequest
 {
     public Dictionary<string, object?>? Parameters { get; set; }
+    public int? Page { get; set; }
+    public int? PageSize { get; set; }
+    public bool? IncludeTotalCount { get; set; }
 }
 
 public class PreviewQueryRequest
@@ -250,4 +285,17 @@ public class PreviewQueryRequest
     public string Query { get; set; } = string.Empty;
     public Dictionary<string, object?>? Parameters { get; set; }
     public int? Limit { get; set; }
+}
+
+public record ExplainQueryRequest
+{
+    public required Guid ConnectionId { get; init; }
+    public required string Query { get; init; }
+    public int TimeoutSeconds { get; init; } = 30;
+}
+
+public record ExplainResultDto
+{
+    public required string Plan { get; init; }
+    public long ExecutionTimeMs { get; init; }
 }

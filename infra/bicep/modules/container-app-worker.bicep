@@ -46,6 +46,33 @@ resource workerApp 'Microsoft.App/containerApps@2023-05-01' = {
               mountPath: '/data'
             }
           ]
+          probes: [
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              failureThreshold: 3
+              successThreshold: 1
+              timeoutSeconds: 5
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 15
+              periodSeconds: 30
+              failureThreshold: 3
+              timeoutSeconds: 5
+            }
+          ]
         }
       ]
       volumes: [

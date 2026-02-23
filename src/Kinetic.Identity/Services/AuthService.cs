@@ -21,17 +21,20 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly IPasswordService _passwordService;
     private readonly IPermissionService _permissionService;
+    private readonly JwtSettings _settings;
 
     public AuthService(
         KineticDbContext db,
         ITokenService tokenService,
         IPasswordService passwordService,
-        IPermissionService permissionService)
+        IPermissionService permissionService,
+        JwtSettings settings)
     {
         _db = db;
         _tokenService = tokenService;
         _passwordService = passwordService;
         _permissionService = permissionService;
+        _settings = settings;
     }
 
     public async Task<AuthResult> RegisterAsync(RegisterRequest request)
@@ -67,9 +70,7 @@ public class AuthService : IAuthService
         // Generate tokens
         var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
         var accessToken = _tokenService.GenerateAccessToken(user, permissions);
-        var refreshToken = _tokenService.GenerateRefreshToken();
-
-        // TODO: Store refresh token in database
+        var refreshToken = await CreateRefreshTokenAsync(user.Id);
 
         return AuthResult.Success(user, accessToken, refreshToken);
     }
@@ -110,23 +111,67 @@ public class AuthService : IAuthService
         // Generate tokens
         var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
         var accessToken = _tokenService.GenerateAccessToken(user, permissions);
-        var refreshToken = _tokenService.GenerateRefreshToken();
-
-        // TODO: Store refresh token in database
+        var refreshToken = await CreateRefreshTokenAsync(user.Id);
 
         return AuthResult.Success(user, accessToken, refreshToken);
     }
 
     public async Task<AuthResult> RefreshTokenAsync(string refreshToken)
     {
-        // TODO: Implement refresh token validation from database
-        return AuthResult.Failure("Invalid refresh token");
+        var stored = await _db.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+
+        if (stored == null || stored.IsRevoked || stored.ExpiresAt <= DateTime.UtcNow)
+        {
+            return AuthResult.Failure("Invalid or expired refresh token");
+        }
+
+        if (stored.User == null || !stored.User.IsActive)
+        {
+            return AuthResult.Failure("User account is inactive");
+        }
+
+        // Rotate: revoke old token, issue new one
+        stored.IsRevoked = true;
+        var newRefreshToken = await CreateRefreshTokenAsync(stored.UserId);
+
+        var permissions = await _permissionService.GetUserPermissionsAsync(stored.UserId);
+        var accessToken = _tokenService.GenerateAccessToken(stored.User, permissions);
+
+        return AuthResult.Success(stored.User, accessToken, newRefreshToken);
     }
 
     public async Task<bool> RevokeRefreshTokenAsync(Guid userId)
     {
-        // TODO: Implement refresh token revocation
+        var tokens = await _db.RefreshTokens
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.IsRevoked = true;
+        }
+
+        await _db.SaveChangesAsync();
         return true;
+    }
+
+    private async Task<string> CreateRefreshTokenAsync(Guid userId)
+    {
+        var tokenValue = _tokenService.GenerateRefreshToken();
+        var refreshToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Token = tokenValue,
+            ExpiresAt = DateTime.UtcNow.AddDays(_settings.RefreshExpiryDays),
+            IsRevoked = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.RefreshTokens.Add(refreshToken);
+        await _db.SaveChangesAsync();
+        return tokenValue;
     }
 
     public async Task<User?> GetUserByIdAsync(Guid userId)

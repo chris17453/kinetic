@@ -179,7 +179,8 @@ public enum GroupRole
     Owner,      // Full control of group
     Admin,      // Can manage group members
     Editor,     // Can create/edit content
-    Viewer      // View only
+    Viewer,     // View only
+    Member      // Basic membership (view only)
 }
 
 public enum ConnectionAccessLevel

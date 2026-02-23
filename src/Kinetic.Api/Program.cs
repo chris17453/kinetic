@@ -14,11 +14,15 @@ using Kinetic.Core.Services.AI;
 using Kinetic.Core.Services.Export;
 using Serilog;
 using Scalar.AspNetCore;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
-    .WriteTo.File("logs/kinetic-.log", rollingInterval: RollingInterval.Day)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File("logs/kinetic-.log", rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 try
@@ -28,6 +32,18 @@ try
 
     // OpenAPI
     builder.Services.AddOpenApi();
+
+    // Configure max request size for file uploads
+    builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+    {
+        var maxMb = builder.Configuration.GetValue("Upload:MaxFileSizeMb", 50);
+        options.MultipartBodyLengthLimit = maxMb * 1024 * 1024;
+    });
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        var maxMb = builder.Configuration.GetValue("Upload:MaxFileSizeMb", 50);
+        options.Limits.MaxRequestBodySize = maxMb * 1024 * 1024;
+    });
 
     // Database
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -77,7 +93,8 @@ try
     builder.Services.AddScoped<IExportService, ExportService>();
 
     // Services
-    var encryptionKey = builder.Configuration["Encryption:Key"] ?? "default-dev-encryption-key-32ch";
+    var encryptionKey = builder.Configuration["Encryption:Key"]
+        ?? throw new InvalidOperationException("Encryption:Key configuration is required. Set the Encryption__Key environment variable.");
     builder.Services.AddScoped<IConnectionService>(sp =>
         new ConnectionService(
             sp.GetRequiredService<KineticDbContext>(),
@@ -93,8 +110,10 @@ try
             new QueryServiceOptions
             {
                 DefaultTimeoutSeconds = builder.Configuration.GetValue("Query:DefaultTimeoutSeconds", 30),
+                MaxQueryTimeoutSeconds = builder.Configuration.GetValue("Query:MaxQueryTimeoutSeconds", 300),
                 DefaultCacheTtlSeconds = builder.Configuration.GetValue("Query:DefaultCacheTtlSeconds", 300),
-                MaxRowsPerQuery = builder.Configuration.GetValue("Query:MaxRowsPerQuery", 100000)
+                MaxRowsPerQuery = builder.Configuration.GetValue("Query:MaxRowsPerQuery", 100000),
+                MaxConcurrentQueriesPerUser = builder.Configuration.GetValue("Query:MaxConcurrentQueriesPerUser", 5)
             }));
 
     builder.Services.AddScoped<IReportService>(sp =>
@@ -110,10 +129,63 @@ try
     {
         options.AddDefaultPolicy(policy =>
         {
-            policy.AllowAnyOrigin()
+            var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+            policy.WithOrigins(allowedOrigins)
+                  .AllowCredentials()
                   .AllowAnyMethod()
                   .AllowAnyHeader();
         });
+    });
+
+    // Rate limiting
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        // Auth endpoints: 10 requests per minute per IP (brute-force protection)
+        options.AddSlidingWindowLimiter("auth", limiterOptions =>
+        {
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+            limiterOptions.SegmentsPerWindow = 6;
+            limiterOptions.PermitLimit = 10;
+            limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            limiterOptions.QueueLimit = 0;
+        });
+
+        // Query endpoints: 60 requests per minute per user (or IP if anonymous)
+        options.AddSlidingWindowLimiter("query", limiterOptions =>
+        {
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+            limiterOptions.SegmentsPerWindow = 6;
+            limiterOptions.PermitLimit = 60;
+            limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            limiterOptions.QueueLimit = 5;
+        });
+
+        // Global fallback: 200 requests per minute per IP
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        {
+            var key = context.User?.Identity?.Name
+                ?? context.Connection.RemoteIpAddress?.ToString()
+                ?? "anonymous";
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                PermitLimit = 200,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        options.OnRejected = async (context, token) =>
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.Headers.RetryAfter = "60";
+            await context.HttpContext.Response.WriteAsJsonAsync(
+                new { error = "Too many requests. Please slow down.", retryAfterSeconds = 60 }, token);
+        };
     });
 
     // Health checks
@@ -124,7 +196,14 @@ try
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
+    app.UseCorrelationId();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+        app.UseHttpsRedirection();
+    }
     app.UseCors();
+    app.UseRateLimiter();
     app.UseSerilogRequestLogging();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -157,6 +236,7 @@ try
     app.MapEmbedEndpoints();
     app.MapExportEndpoints();
     app.MapAIEndpoints();
+    app.MapMetricsEndpoints();
 
     // Serve embed widget static files
     app.UseStaticFiles();

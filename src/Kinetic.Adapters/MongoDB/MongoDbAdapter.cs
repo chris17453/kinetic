@@ -14,6 +14,19 @@ namespace Kinetic.Adapters.MongoDB;
 /// </summary>
 public class MongoDbAdapter : IDbAdapter
 {
+    private static readonly HashSet<string> AllowedPipelineOperators = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "$match", "$group", "$project", "$sort", "$limit", "$skip",
+        "$unwind", "$lookup", "$addFields", "$replaceRoot", "$count",
+        "$bucket", "$bucketAuto", "$sortByCount", "$facet", "$sample",
+        "$geoNear", "$graphLookup", "$redact", "$set", "$unset"
+    };
+
+    private static readonly HashSet<string> BlockedPipelineOperators = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "$out", "$merge", "$indexStats", "$collStats", "$currentOp",
+        "$listLocalSessions", "$listSessions", "$planCacheStats"
+    };
     public string Name => "MongoDB";
     public ConnectionType ConnectionType => ConnectionType.MongoDB;
 
@@ -92,8 +105,8 @@ public class MongoDbAdapter : IDbAdapter
                         Skip = options?.Offset
                     };
                     
-                    var cursor = await collection.FindAsync(filter, findOptions, ct);
-                    var docs = await cursor.ToListAsync(ct);
+                    var findCursor = await collection.FindAsync(filter, findOptions, ct);
+                    var docs = await findCursor.ToListAsync(ct);
                     
                     return ConvertToQueryResult(docs, sw.Elapsed);
                 }
@@ -120,10 +133,13 @@ public class MongoDbAdapter : IDbAdapter
                 pipeline.Add(new BsonDocument("$limit", options.MaxRows.Value));
             }
             
+            // Validate pipeline stages for security
+            var stages = pipeline.Select(s => s.AsBsonDocument).ToList();
+            ValidatePipelineStages(stages);
+
             // Execute aggregation
             var coll = database.GetCollection<BsonDocument>(collectionName);
-            var pipelineDefinition = PipelineDefinition<BsonDocument, BsonDocument>.Create(
-                pipeline.Select(s => s.AsBsonDocument));
+            var pipelineDefinition = PipelineDefinition<BsonDocument, BsonDocument>.Create(stages);
             
             var cursor = await coll.AggregateAsync(pipelineDefinition, cancellationToken: ct);
             var documents = await cursor.ToListAsync(ct);
@@ -430,6 +446,21 @@ public class MongoDbAdapter : IDbAdapter
         }
         
         return BsonSerializer.Deserialize<BsonArray>(json);
+    }
+
+    private static void ValidatePipelineStages(IEnumerable<BsonDocument> stages)
+    {
+        foreach (var stage in stages)
+        {
+            var op = stage.Elements.FirstOrDefault().Name;
+            if (string.IsNullOrEmpty(op)) continue;
+
+            if (BlockedPipelineOperators.Contains(op))
+            {
+                throw new InvalidOperationException(
+                    $"Pipeline operator '{op}' is not allowed for security reasons.");
+            }
+        }
     }
 
     private static string MapBsonTypeToFriendly(string bsonType)

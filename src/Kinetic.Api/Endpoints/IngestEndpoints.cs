@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Kinetic.Ingest.Services;
 using Kinetic.Ingest.Models;
 
@@ -141,25 +142,62 @@ public static class IngestEndpoints
         });
     }
 
-    private static IResult PreviewDataset(
-        string id, 
+    private static async Task<IResult> PreviewDataset(
+        string id,
         [FromQuery] int limit,
-        IngestPipeline pipeline)
+        IngestPipeline pipeline,
+        IConfiguration configuration)
     {
         if (!pipeline.Datasets.TryGetValue(id, out var dataset))
         {
             return Results.NotFound(new { error = "Dataset not found" });
         }
 
-        // Note: This would need to query the actual table - simplified for now
+        var rows = new List<Dictionary<string, object?>>();
+        var previewLimit = Math.Clamp(limit <= 0 ? 100 : limit, 1, 1000);
+
+        try
+        {
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+            await using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = $"SELECT TOP ({previewLimit}) * FROM [{dataset.Schema}].[{dataset.TableName}]";
+            await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var row = new Dictionary<string, object?>();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    var val = reader.GetValue(i);
+                    row[reader.GetName(i)] = val == DBNull.Value ? null : val;
+                }
+                rows.Add(row);
+            }
+        }
+        catch (Exception ex)
+        {
+            return Results.Ok(new DataPreviewDto
+            {
+                DatasetId = id,
+                TableName = $"[{dataset.Schema}].[{dataset.TableName}]",
+                Columns = dataset.Columns.Select(c => c.Name).ToList(),
+                RowCount = dataset.RowCount,
+                PreviewAvailable = false,
+                Message = $"Preview failed: {ex.Message}"
+            });
+        }
+
         return Results.Ok(new DataPreviewDto
         {
             DatasetId = id,
             TableName = $"[{dataset.Schema}].[{dataset.TableName}]",
             Columns = dataset.Columns.Select(c => c.Name).ToList(),
             RowCount = dataset.RowCount,
-            PreviewAvailable = false,
-            Message = "Use the Query Playground to query this dataset directly"
+            PreviewAvailable = true,
+            Rows = rows
         });
     }
 }
@@ -217,4 +255,5 @@ public record DataPreviewDto
     public int RowCount { get; init; }
     public bool PreviewAvailable { get; init; }
     public string? Message { get; init; }
+    public List<Dictionary<string, object?>>? Rows { get; init; }
 }

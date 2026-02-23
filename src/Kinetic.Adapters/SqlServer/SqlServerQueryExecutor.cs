@@ -85,4 +85,21 @@ public class SqlServerQueryExecutor : QueryExecutorBase
         
         return base.GetErrorCode(ex);
     }
+
+    public override async Task<string> ExplainAsync(string connectionString, string query, int timeoutSeconds = 30, CancellationToken ct = default)
+    {
+        await using var connection = CreateConnection(connectionString);
+        await connection.OpenAsync(ct);
+        await using var setCmd = connection.CreateCommand();
+        setCmd.CommandText = "SET SHOWPLAN_XML ON";
+        await setCmd.ExecuteNonQueryAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = query;
+        command.CommandTimeout = timeoutSeconds;
+        var result = await command.ExecuteScalarAsync(ct);
+        await using var unsetCmd = connection.CreateCommand();
+        unsetCmd.CommandText = "SET SHOWPLAN_XML OFF";
+        await unsetCmd.ExecuteNonQueryAsync(ct);
+        return result?.ToString() ?? "No plan returned";
+    }
 }

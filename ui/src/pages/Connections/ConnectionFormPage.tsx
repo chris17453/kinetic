@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { ConnectionType, Visibility } from '../../lib/api/types';
+import { Breadcrumb } from '../../components/common';
 
 const connectionTypes: { value: ConnectionType; label: string }[] = [
   { value: 'SqlServer', label: 'SQL Server' },
@@ -17,54 +21,72 @@ const connectionTypes: { value: ConnectionType; label: string }[] = [
 ];
 
 const visibilityOptions: { value: Visibility; label: string }[] = [
-  { value: 'Private', label: 'Private - Only you' },
-  { value: 'Group', label: 'Group - Shared with your groups' },
-  { value: 'Department', label: 'Department - Shared with department' },
-  { value: 'Public', label: 'Public - Everyone' },
+  { value: 'Private', label: 'Private — Only you' },
+  { value: 'Group', label: 'Group — Shared with your groups' },
+  { value: 'Department', label: 'Department — Shared with department' },
+  { value: 'Public', label: 'Public — Everyone' },
 ];
 
-interface FormData {
+const connectionFormSchema = z.object({
+  name: z.string().min(1, 'Name is required').min(3, 'Name must be at least 3 characters'),
+  description: z.string(),
+  type: z.enum(['SqlServer', 'PostgreSQL', 'MySQL', 'SQLite', 'Oracle', 'DuckDB', 'ClickHouse', 'Snowflake', 'BigQuery', 'Custom']),
+  connectionString: z.string(),
+  visibility: z.enum(['Private', 'Group', 'Department', 'Public']),
+});
+
+type ConnectionFormValues = {
   name: string;
   description: string;
   type: ConnectionType;
   connectionString: string;
   visibility: Visibility;
-}
+};
 
 export function ConnectionFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const queryClient = useQueryClient();
   const isEditing = !!id;
-
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    description: '',
-    type: 'SqlServer',
-    connectionString: '',
-    visibility: 'Private',
-  });
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showConnectionString, setShowConnectionString] = useState(false);
 
-  // Load existing connection if editing
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<ConnectionFormValues>({
+    resolver: zodResolver(connectionFormSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      type: 'SqlServer',
+      connectionString: '',
+      visibility: 'Private',
+    },
+  });
+
+  const watchedType = watch('type');
+  const watchedConnectionString = watch('connectionString');
+
   useQuery({
     queryKey: ['connections', id],
     queryFn: async () => {
       const res = await api.get(`/connections/${id}`);
-      setForm({
-        name: res.data.name,
-        description: res.data.description || '',
-        type: res.data.type,
-        connectionString: '', // Don't load connection string for security
-        visibility: res.data.visibility,
-      });
+      setValue('name', res.data.name);
+      setValue('description', res.data.description || '');
+      setValue('type', res.data.type);
+      setValue('connectionString', '');
+      setValue('visibility', res.data.visibility);
       return res.data;
     },
     enabled: isEditing,
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (data: FormData) => {
+    mutationFn: async (data: ConnectionFormValues) => {
       if (isEditing) {
         return api.put(`/connections/${id}`, data);
       }
@@ -79,8 +101,8 @@ export function ConnectionFormPage() {
   const testMutation = useMutation({
     mutationFn: async () => {
       const res = await api.post('/connections/test', {
-        type: form.type,
-        connectionString: form.connectionString,
+        type: watchedType,
+        connectionString: watchedConnectionString,
       });
       return res.data;
     },
@@ -88,152 +110,183 @@ export function ConnectionFormPage() {
     onError: (err: Error) => setTestResult({ success: false, message: err.message }),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveMutation.mutate(form);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const onSubmit = (data: ConnectionFormValues) => {
     setTestResult(null);
+    saveMutation.mutate(data);
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">
-        {isEditing ? 'Edit Connection' : 'New Connection'}
-      </h1>
+    <div>
+      <Breadcrumb crumbs={[
+        { label: 'Dashboard', path: '/' },
+        { label: 'Connections', path: '/connections' },
+        { label: isEditing ? 'Edit Connection' : 'New Connection' },
+      ]} />
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-6">
-        <div>
-          <label htmlFor="name" className="label">
-            Name *
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            required
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            value={form.name}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="description" className="label">
-            Description
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            rows={2}
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            value={form.description}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="type" className="label">
-            Database Type *
-          </label>
-          <select
-            id="type"
-            name="type"
-            required
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            value={form.type}
-            onChange={handleChange}
-          >
-            {connectionTypes.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="connectionString" className="label">
-            Connection String *
-          </label>
-          <textarea
-            id="connectionString"
-            name="connectionString"
-            rows={3}
-            required={!isEditing}
-            placeholder={getPlaceholder(form.type)}
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 font-mono text-sm"
-            value={form.connectionString}
-            onChange={handleChange}
-          />
-          {isEditing && (
-            <p className="mt-1 text-xs text-gray-500">
-              Leave empty to keep existing connection string
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor="visibility" className="label">
-            Visibility
-          </label>
-          <select
-            id="visibility"
-            name="visibility"
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            value={form.visibility}
-            onChange={handleChange}
-          >
-            {visibilityOptions.map((v) => (
-              <option key={v.value} value={v.value}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {testResult && (
-          <div
-            className={`p-3 rounded-md ${
-              testResult.success
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : 'bg-red-50 text-red-700 border border-red-200'
-            }`}
-          >
-            {testResult.message}
+      <div className="row justify-content-center">
+        <div className="col-12 col-md-8 col-lg-6">
+          <div className="d-flex align-items-center gap-2 mb-4">
+            <i className={`fa-solid ${isEditing ? 'fa-pen-to-square' : 'fa-plug'} text-primary`} style={{ fontSize: '1.25rem' }}></i>
+            <h4 className="fw-bold mb-0">{isEditing ? 'Edit Connection' : 'New Connection'}</h4>
           </div>
-        )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={() => testMutation.mutate()}
-            disabled={!form.connectionString || testMutation.isPending}
-            className="btn-secondary"
-          >
-            {testMutation.isPending ? 'Testing...' : 'Test Connection'}
-          </button>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="card border-0 shadow-sm mb-3">
+              <div className="card-header bg-white py-2 border-bottom">
+                <span className="small fw-semibold text-muted text-uppercase">General</span>
+              </div>
+              <div className="card-body">
+                {/* Name */}
+                <div className="mb-3">
+                  <label htmlFor="name" className="form-label fw-medium">
+                    Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    className={`form-control ${errors.name ? 'is-invalid' : ''}`}
+                    placeholder="My Production Database"
+                    {...register('name')}
+                  />
+                  {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
+                </div>
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/connections')}
-              className="btn-secondary"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saveMutation.isPending}
-              className="btn-primary"
-            >
-              {saveMutation.isPending ? 'Saving...' : isEditing ? 'Update' : 'Create'}
-            </button>
-          </div>
+                {/* Description */}
+                <div className="mb-3">
+                  <label htmlFor="description" className="form-label fw-medium">Description</label>
+                  <textarea
+                    id="description"
+                    rows={2}
+                    className="form-control"
+                    placeholder="Optional description…"
+                    {...register('description')}
+                  />
+                </div>
+
+                {/* Type */}
+                <div className="mb-0">
+                  <label htmlFor="type" className="form-label fw-medium">
+                    Database Type <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    id="type"
+                    className={`form-select ${errors.type ? 'is-invalid' : ''}`}
+                    {...register('type')}
+                  >
+                    {connectionTypes.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  {errors.type && <div className="invalid-feedback">{errors.type.message}</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="card border-0 shadow-sm mb-3">
+              <div className="card-header bg-white py-2 border-bottom">
+                <span className="small fw-semibold text-muted text-uppercase">Connection</span>
+              </div>
+              <div className="card-body">
+                {/* Connection String */}
+                <div className="mb-0">
+                  <label htmlFor="connectionString" className="form-label fw-medium">
+                    Connection String {!isEditing && <span className="text-danger">*</span>}
+                  </label>
+                  <div className="input-group">
+                    <input
+                      id="connectionString"
+                      type={showConnectionString ? 'text' : 'password'}
+                      className={`form-control font-monospace ${errors.connectionString ? 'is-invalid' : ''}`}
+                      placeholder={getPlaceholder(watchedType)}
+                      {...register('connectionString', {
+                        onChange: () => setTestResult(null),
+                      })}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => setShowConnectionString(v => !v)}
+                      title={showConnectionString ? 'Hide' : 'Show'}
+                    >
+                      <i className={`fa-solid ${showConnectionString ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
+                    {errors.connectionString && <div className="invalid-feedback">{errors.connectionString.message}</div>}
+                  </div>
+                  {isEditing && (
+                    <div className="form-text">
+                      <i className="fa-solid fa-info-circle me-1"></i>
+                      Leave empty to keep the existing connection string.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="card border-0 shadow-sm mb-3">
+              <div className="card-header bg-white py-2 border-bottom">
+                <span className="small fw-semibold text-muted text-uppercase">Sharing</span>
+              </div>
+              <div className="card-body">
+                <div className="mb-0">
+                  <label htmlFor="visibility" className="form-label fw-medium">Visibility</label>
+                  <select
+                    id="visibility"
+                    className="form-select"
+                    {...register('visibility')}
+                  >
+                    {visibilityOptions.map(v => (
+                      <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Test result alert */}
+            {testResult && (
+              <div className={`alert ${testResult.success ? 'alert-success' : 'alert-danger'} d-flex align-items-start gap-2 py-2 mb-3`}>
+                <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-circle-xmark'} mt-1`}></i>
+                <span>{testResult.message}</span>
+              </div>
+            )}
+
+            {/* Save error */}
+            {saveMutation.isError && (
+              <div className="alert alert-danger d-flex align-items-start gap-2 py-2 mb-3">
+                <i className="fa-solid fa-triangle-exclamation mt-1"></i>
+                <span>Failed to save connection. Please try again.</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="d-flex align-items-center justify-content-between">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => testMutation.mutate()}
+                disabled={!watchedConnectionString || testMutation.isPending}
+              >
+                {testMutation.isPending
+                  ? <><span className="spinner-border spinner-border-sm me-2"></span>Testing…</>
+                  : <><i className="fa-solid fa-plug me-2"></i>Test Connection</>
+                }
+              </button>
+
+              <div className="d-flex gap-2">
+                <button type="button" className="btn btn-outline-secondary" onClick={() => navigate('/connections')}>
+                  <i className="fa-solid fa-xmark me-1"></i>Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
+                  {saveMutation.isPending
+                    ? <><span className="spinner-border spinner-border-sm me-2"></span>Saving…</>
+                    : <><i className={`fa-solid ${isEditing ? 'fa-floppy-disk' : 'fa-plus'} me-2`}></i>{isEditing ? 'Update' : 'Create'}</>
+                  }
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

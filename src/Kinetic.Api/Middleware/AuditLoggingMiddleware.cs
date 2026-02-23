@@ -23,7 +23,6 @@ public class AuditLoggingMiddleware
         var path = context.Request.Path.Value ?? "";
         var method = context.Request.Method;
 
-        // Skip non-auditable requests
         if (!ShouldAudit(method, path))
         {
             await _next(context);
@@ -32,7 +31,21 @@ public class AuditLoggingMiddleware
 
         var sw = Stopwatch.StartNew();
         var userId = GetUserId(context);
-        var originalBodyStream = context.Response.Body;
+
+        // Capture request body (enable buffering so it can be re-read by the handler)
+        context.Request.EnableBuffering();
+        string? requestBody = null;
+        if (context.Request.ContentLength is > 0 and < 65536) // Only capture up to 64KB
+        {
+            using var reader = new StreamReader(
+                context.Request.Body,
+                encoding: System.Text.Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false,
+                leaveOpen: true);
+            requestBody = await reader.ReadToEndAsync();
+            context.Request.Body.Position = 0; // Reset for the actual handler
+            requestBody = RedactSensitiveFields(requestBody);
+        }
 
         try
         {
@@ -41,21 +54,28 @@ public class AuditLoggingMiddleware
         finally
         {
             sw.Stop();
-
             try
             {
+                var entityType = context.Items.TryGetValue("AuditEntityType", out var et) && et is string etStr
+                    ? etStr
+                    : ExtractEntityType(path);
+                var entityId = context.Items.TryGetValue("AuditEntityId", out var eid) && eid is Guid eidGuid
+                    ? eidGuid
+                    : ExtractEntityId(path);
+
                 var auditLog = new AuditLog
                 {
                     Id = Guid.NewGuid(),
                     UserId = userId,
                     Action = $"{method} {path}",
-                    EntityType = ExtractEntityType(path),
-                    EntityId = ExtractEntityId(path),
+                    EntityType = entityType,
+                    EntityId = entityId,
                     Timestamp = DateTime.UtcNow,
                     IpAddress = context.Connection.RemoteIpAddress?.ToString(),
                     UserAgent = context.Request.Headers.UserAgent.ToString(),
                     StatusCode = context.Response.StatusCode,
-                    DurationMs = (int)sw.ElapsedMilliseconds
+                    DurationMs = (int)sw.ElapsedMilliseconds,
+                    NewValues = requestBody
                 };
 
                 db.AuditLogs.Add(auditLog);
@@ -65,6 +85,30 @@ public class AuditLoggingMiddleware
             {
                 _logger.LogError(ex, "Failed to write audit log");
             }
+        }
+    }
+
+    private static string RedactSensitiveFields(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        try
+        {
+            // Redact common sensitive field names
+            var sensitiveFields = new[] { "password", "connectionString", "secret", "token", "apiKey", "key" };
+            foreach (var field in sensitiveFields)
+            {
+                // Simple regex replace for JSON string values of sensitive keys
+                json = System.Text.RegularExpressions.Regex.Replace(
+                    json,
+                    $@"(""{field}""\s*:\s*)""\s*[^""]*""",
+                    $@"$1""[REDACTED]""",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+            return json;
+        }
+        catch
+        {
+            return "[body parse error]";
         }
     }
 

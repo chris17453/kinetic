@@ -34,6 +34,13 @@ param entraIdClientId string = ''
 @description('Entra ID client secret')
 param entraIdClientSecret string = ''
 
+@description('Environment tier - controls resource SKUs and retention')
+@allowed(['dev', 'staging', 'prod'])
+param environmentName string = 'dev'
+
+@description('Email address for operational alerts (leave empty to disable)')
+param alertEmail string = ''
+
 // Variables
 var resourceGroupName = 'rg-${baseName}-${environment}'
 var tags = {
@@ -60,6 +67,7 @@ module sql 'modules/sql.bicep' = {
     adminUsername: sqlAdminUsername
     adminPassword: sqlAdminPassword
     tags: tags
+    environmentName: environmentName
   }
 }
 
@@ -99,6 +107,17 @@ module containerAppsEnv 'modules/container-apps-env.bicep' = {
   }
 }
 
+// Monitoring (Log Analytics + Application Insights)
+module monitoring 'modules/monitoring.bicep' = {
+  name: 'monitoring'
+  scope: rg
+  params: {
+    location: location
+    namePrefix: baseName
+    environmentName: environmentName
+  }
+}
+
 // API Container App
 module apiApp 'modules/container-app-api.bicep' = {
   name: 'api-deployment'
@@ -115,6 +134,7 @@ module apiApp 'modules/container-app-api.bicep' = {
     entraIdTenantId: entraIdTenantId
     entraIdClientId: entraIdClientId
     entraIdClientSecret: entraIdClientSecret
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     tags: tags
   }
 }
@@ -162,9 +182,51 @@ module ui 'modules/static-web-app.bicep' = {
   }
 }
 
+// Azure Front Door with WAF Policy
+module waf 'modules/waf.bicep' = {
+  name: 'waf'
+  scope: rg
+  params: {
+    namePrefix: baseName
+    environmentName: environmentName
+    apiHostname: apiApp.outputs.fqdn
+    uiHostname: ''
+  }
+}
+
+// Azure Monitor Alerting Rules
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  scope: rg
+  params: {
+    namePrefix: baseName
+    environmentName: environmentName
+    workspaceId: monitoring.outputs.workspaceId
+    alertEmail: alertEmail
+  }
+}
+
+// Private Endpoints (prod only to save cost in dev/staging)
+// NOTE: This module requires a pre-provisioned VNet with a 'private-endpoints' subnet.
+// Set subnetId to the fully-qualified resource ID of that subnet before deploying to prod.
+module privateEndpoints 'modules/private-endpoints.bicep' = if (environmentName == 'prod') {
+  name: 'privateEndpoints'
+  scope: rg
+  params: {
+    location: location
+    namePrefix: baseName
+    environmentName: environmentName
+    sqlServerId: sql.outputs.serverId
+    redisCacheId: redis.outputs.id
+    storageAccountId: storage.outputs.id
+    subnetId: '' // TODO: Replace with the subnet resource ID of your private-endpoints subnet
+  }
+}
+
 // Outputs
 output resourceGroupName string = rg.name
 output apiUrl string = apiApp.outputs.url
 output uiUrl string = ui.outputs.url
 output sqlServerName string = sql.outputs.serverName
 output redisHostName string = redis.outputs.hostName
+output frontDoorHostname string = waf.outputs.frontDoorEndpointHostname

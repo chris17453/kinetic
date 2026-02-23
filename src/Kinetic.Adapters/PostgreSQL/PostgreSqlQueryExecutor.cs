@@ -75,4 +75,16 @@ public class PostgreSqlQueryExecutor : QueryExecutorBase
         
         return base.GetErrorCode(ex);
     }
+
+    public override async Task<string> ExplainAsync(string connectionString, string query, int timeoutSeconds = 30, CancellationToken ct = default)
+    {
+        var explainQuery = $"EXPLAIN (FORMAT JSON, ANALYZE false, VERBOSE true) {query}";
+        await using var connection = CreateConnection(connectionString);
+        await connection.OpenAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = explainQuery;
+        command.CommandTimeout = timeoutSeconds;
+        var result = await command.ExecuteScalarAsync(ct);
+        return result?.ToString() ?? "No plan returned";
+    }
 }

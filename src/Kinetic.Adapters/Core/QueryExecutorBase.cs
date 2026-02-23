@@ -34,8 +34,10 @@ public abstract class QueryExecutorBase : IQueryExecutor
             
             if (offset.HasValue && limit.HasValue)
             {
-                finalQuery = WrapQueryForPagination(processedQuery, offset.Value, limit.Value, 
-                    request.SortColumn, request.SortDirection);
+                // Validate sort column against result schema to prevent SQL injection
+                var safeSortColumn = ValidateSortColumn(request.SortColumn, request.AllowedColumns);
+                finalQuery = WrapQueryForPagination(processedQuery, offset.Value, limit.Value,
+                    safeSortColumn, request.SortDirection);
             }
             
             // Get total count if requested
@@ -281,5 +283,30 @@ public abstract class QueryExecutorBase : IQueryExecutor
         
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+    }
+    protected virtual string? ValidateSortColumn(string? sortColumn, IReadOnlyList<string>? allowedColumns)
+    {
+        if (string.IsNullOrWhiteSpace(sortColumn))
+            return null;
+
+        // If an explicit allowed list is provided, enforce it
+        if (allowedColumns != null && allowedColumns.Count > 0)
+        {
+            return allowedColumns.Any(c => string.Equals(c, sortColumn, StringComparison.OrdinalIgnoreCase))
+                ? sortColumn
+                : null;
+        }
+
+        // Otherwise, only allow simple column names (letters, digits, underscores, dots for schema.table.col)
+        // This prevents injection via ORDER BY
+        return System.Text.RegularExpressions.Regex.IsMatch(sortColumn, @"^[\w][\w\s]*$")
+            ? sortColumn
+            : null;
+
+    }
+
+    public virtual Task<string> ExplainAsync(string connectionString, string query, int timeoutSeconds = 30, CancellationToken ct = default)
+    {
+        return Task.FromResult("EXPLAIN is not supported for this database type.");
     }
 }

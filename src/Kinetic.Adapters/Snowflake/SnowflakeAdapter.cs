@@ -160,23 +160,20 @@ public class SnowflakeAdapter : DbAdapterBase
 
 public class SnowflakeQueryExecutor : QueryExecutorBase
 {
-    public override ConnectionType ConnectionType => ConnectionType.Snowflake;
-    
     protected override DbConnection CreateConnection(string connectionString)
     {
         return new SnowflakeDbConnection(connectionString);
     }
-    
-    protected override string FormatParameter(string name)
+
+    protected override string WrapQueryForPagination(string query, int offset, int limit, string? sortColumn, SortDirection sortDirection)
     {
-        return $":{name}"; // Snowflake uses :name for parameters
+        var direction = sortDirection == SortDirection.Descending ? "DESC" : "ASC";
+        var orderClause = sortColumn != null ? $" ORDER BY \"{sortColumn}\" {direction}" : string.Empty;
+        return $"SELECT * FROM ({query}) _paged{orderClause} LIMIT {limit} OFFSET {offset}";
     }
-    
-    protected override void AddParameter(DbCommand command, string name, object? value)
+
+    protected override string WrapQueryForCount(string query)
     {
-        var param = command.CreateParameter();
-        param.ParameterName = name;
-        param.Value = value ?? DBNull.Value;
-        command.Parameters.Add(param);
+        return $"SELECT COUNT(*) FROM ({query}) _count";
     }
 }

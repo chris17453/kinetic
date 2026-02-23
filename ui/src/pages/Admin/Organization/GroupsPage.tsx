@@ -1,45 +1,4 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Users,
-  Plus,
-  Search,
-  Settings,
-  Shield,
-  Database,
-  FileText,
-  Trash2,
-  Edit,
-  ChevronRight,
-  Link2,
-  UserPlus,
-} from 'lucide-react';
-
-interface Group {
-  id: string;
-  name: string;
-  description: string;
-  memberCount: number;
-  parentGroupId?: string;
-  entraGroupId?: string;
-  syncWithEntra: boolean;
-  isActive: boolean;
-  createdAt: string;
-  permissions: GroupPermissions;
-}
 
 interface GroupPermissions {
   canViewReports: boolean;
@@ -67,13 +26,17 @@ interface GroupPermissions {
   canManageGroupSettings: boolean;
 }
 
-interface GroupMember {
+interface Group {
   id: string;
-  userId: string;
-  email: string;
   name: string;
-  role: 'Owner' | 'Admin' | 'Editor' | 'Viewer';
-  joinedAt: string;
+  description: string;
+  memberCount: number;
+  parentGroupId?: string;
+  entraGroupId?: string;
+  syncWithEntra: boolean;
+  isActive: boolean;
+  createdAt: string;
+  permissions: GroupPermissions;
 }
 
 const defaultPermissions: GroupPermissions = {
@@ -137,12 +100,40 @@ const sampleGroups: Group[] = [
   },
 ];
 
+interface PermissionToggleProps {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  description?: string;
+}
+
+function PermissionToggle({ label, checked, onChange, description }: PermissionToggleProps) {
+  return (
+    <div className="d-flex align-items-center justify-content-between py-2">
+      <div>
+        <div className="fw-medium">{label}</div>
+        {description && <div className="small text-muted">{description}</div>}
+      </div>
+      <div className="form-check form-switch mb-0">
+        <input
+          className="form-check-input"
+          type="checkbox"
+          role="switch"
+          checked={checked}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function GroupsPage() {
   const [groups, setGroups] = useState<Group[]>(sampleGroups);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroup, setNewGroup] = useState({ name: '', description: '' });
+  const [activeTab, setActiveTab] = useState('members');
 
   const filteredGroups = groups.filter(
     g => g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -162,467 +153,356 @@ export function GroupsPage() {
     };
     setGroups([...groups, group]);
     setNewGroup({ name: '', description: '' });
-    setShowCreateDialog(false);
+    setShowCreateModal(false);
     setSelectedGroup(group);
   };
 
-  const PermissionToggle = ({ label, checked, onChange, description }: {
-    label: string;
-    checked: boolean;
-    onChange: (v: boolean) => void;
-    description?: string;
-  }) => (
-    <div className="flex items-center justify-between py-2">
-      <div>
-        <Label className="font-medium">{label}</Label>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
-    </div>
-  );
+  const updatePermission = (key: keyof GroupPermissions, value: boolean) => {
+    if (!selectedGroup) return;
+    const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, [key]: value } };
+    setSelectedGroup(updated);
+    setGroups(groups.map(g => g.id === updated.id ? updated : g));
+  };
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="container-fluid py-4">
+      {/* Header */}
+      <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold">Groups</h1>
-          <p className="text-muted-foreground">Manage groups and their permissions</p>
+          <h4 className="fw-bold mb-1">Groups</h4>
+          <p className="text-muted mb-0 small">Manage groups and their permissions</p>
         </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Group
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Group</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div>
-                <Label>Group Name</Label>
-                <Input
-                  value={newGroup.name}
-                  onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-                  placeholder="e.g., Marketing Team"
-                />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Input
-                  value={newGroup.description}
-                  onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
-                  placeholder="Brief description of this group"
-                />
-              </div>
-              <Button onClick={handleCreateGroup} className="w-full" disabled={!newGroup.name}>
-                Create Group
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+          <i className="fa-solid fa-plus me-2"></i>Create Group
+        </button>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="row g-3">
         {/* Groups List */}
-        <div className="col-span-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm">
+            <div className="card-header bg-white border-bottom py-2">
+              <div className="input-group input-group-sm">
+                <span className="input-group-text border-0 bg-transparent">
+                  <i className="fa-solid fa-search text-muted"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control border-0 ps-0"
                   placeholder="Search groups..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 />
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y max-h-[600px] overflow-y-auto">
-                {filteredGroups.map((group) => (
-                  <div
-                    key={group.id}
-                    className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
-                      selectedGroup?.id === group.id ? 'bg-muted' : ''
-                    }`}
-                    onClick={() => setSelectedGroup(group)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Users className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">{group.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {group.memberCount} members
-                          </p>
-                        </div>
+            </div>
+            <div className="card-body p-0" style={{ maxHeight: 600, overflowY: 'auto' }}>
+              {filteredGroups.map((group) => (
+                <div
+                  key={group.id}
+                  className={`p-3 border-bottom cursor-pointer ${selectedGroup?.id === group.id ? 'bg-light' : ''}`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => { setSelectedGroup(group); setActiveTab('members'); }}
+                >
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center gap-2">
+                      <div
+                        className="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center"
+                        style={{ width: 40, height: 40 }}
+                      >
+                        <i className="fa-solid fa-users text-primary"></i>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {group.syncWithEntra && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Link2 className="w-3 h-3 mr-1" />
-                            Entra
-                          </Badge>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <div className="fw-medium">{group.name}</div>
+                        <div className="small text-muted">{group.memberCount} members</div>
                       </div>
                     </div>
+                    <div className="d-flex align-items-center gap-1">
+                      {group.syncWithEntra && (
+                        <span className="badge bg-secondary-subtle text-secondary fw-normal small">
+                          <i className="fa-solid fa-link me-1"></i>Entra
+                        </span>
+                      )}
+                      <i className="fa-solid fa-chevron-right text-muted small"></i>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Group Details */}
-        <div className="col-span-8">
+        <div className="col-12 col-md-8">
           {selectedGroup ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white border-bottom py-3">
+                <div className="d-flex align-items-center justify-content-between">
                   <div>
-                    <CardTitle>{selectedGroup.name}</CardTitle>
-                    <p className="text-muted-foreground">{selectedGroup.description}</p>
+                    <h6 className="fw-bold mb-1">{selectedGroup.name}</h6>
+                    <p className="text-muted mb-0 small">{selectedGroup.description}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
-                    </Button>
-                    <Button variant="destructive" size="sm">
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
-                    </Button>
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-outline-secondary btn-sm">
+                      <i className="fa-solid fa-pen me-1"></i>Edit
+                    </button>
+                    <button className="btn btn-outline-danger btn-sm">
+                      <i className="fa-solid fa-trash me-1"></i>Delete
+                    </button>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="members">
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="members">
-                      <Users className="w-4 h-4 mr-2" />
-                      Members
-                    </TabsTrigger>
-                    <TabsTrigger value="permissions">
-                      <Shield className="w-4 h-4 mr-2" />
-                      Permissions
-                    </TabsTrigger>
-                    <TabsTrigger value="resources">
-                      <Database className="w-4 h-4 mr-2" />
-                      Resources
-                    </TabsTrigger>
-                    <TabsTrigger value="settings">
-                      <Settings className="w-4 h-4 mr-2" />
-                      Settings
-                    </TabsTrigger>
-                  </TabsList>
+              </div>
+              <div className="card-body">
+                {/* Tabs */}
+                <ul className="nav nav-tabs mb-3">
+                  {['members', 'permissions', 'resources', 'settings'].map(tab => (
+                    <li className="nav-item" key={tab}>
+                      <button
+                        className={`nav-link ${activeTab === tab ? 'active' : ''}`}
+                        onClick={() => setActiveTab(tab)}
+                      >
+                        {tab === 'members' && <><i className="fa-solid fa-users me-1"></i>Members</>}
+                        {tab === 'permissions' && <><i className="fa-solid fa-shield me-1"></i>Permissions</>}
+                        {tab === 'resources' && <><i className="fa-solid fa-database me-1"></i>Resources</>}
+                        {tab === 'settings' && <><i className="fa-solid fa-gear me-1"></i>Settings</>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
 
-                  {/* Members Tab */}
-                  <TabsContent value="members" className="mt-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <Input placeholder="Search members..." className="max-w-sm" />
-                      <Button size="sm">
-                        <UserPlus className="w-4 h-4 mr-2" />
-                        Add Member
-                      </Button>
+                {/* Members Tab */}
+                {activeTab === 'members' && (
+                  <div>
+                    <div className="d-flex align-items-center justify-content-between mb-3">
+                      <input type="text" className="form-control form-control-sm w-50" placeholder="Search members..." />
+                      <button className="btn btn-primary btn-sm">
+                        <i className="fa-solid fa-user-plus me-1"></i>Add Member
+                      </button>
                     </div>
-                    <div className="border rounded-lg divide-y">
+                    <div className="list-group list-group-flush border rounded">
                       {[
                         { name: 'John Smith', email: 'john@example.com', role: 'Owner' },
                         { name: 'Jane Doe', email: 'jane@example.com', role: 'Admin' },
                         { name: 'Bob Wilson', email: 'bob@example.com', role: 'Editor' },
                         { name: 'Alice Brown', email: 'alice@example.com', role: 'Viewer' },
                       ].map((member, i) => (
-                        <div key={i} className="p-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                        <div key={i} className="list-group-item d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center gap-2">
+                            <div
+                              className="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center fw-medium small"
+                              style={{ width: 32, height: 32 }}
+                            >
                               {member.name.split(' ').map(n => n[0]).join('')}
                             </div>
                             <div>
-                              <p className="font-medium">{member.name}</p>
-                              <p className="text-sm text-muted-foreground">{member.email}</p>
+                              <div className="fw-medium">{member.name}</div>
+                              <div className="small text-muted">{member.email}</div>
                             </div>
                           </div>
-                          <Badge variant={member.role === 'Owner' ? 'default' : 'secondary'}>
+                          <span className={`badge ${member.role === 'Owner' ? 'bg-primary' : 'bg-secondary'}`}>
                             {member.role}
-                          </Badge>
+                          </span>
                         </div>
                       ))}
                     </div>
-                  </TabsContent>
+                  </div>
+                )}
 
-                  {/* Permissions Tab */}
-                  <TabsContent value="permissions" className="mt-4 space-y-6">
+                {/* Permissions Tab */}
+                {activeTab === 'permissions' && (
+                  <div className="vstack gap-4">
                     {/* Reports */}
                     <div>
-                      <h3 className="font-semibold flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4" /> Report Permissions
-                      </h3>
-                      <div className="border rounded-lg p-4 space-y-2">
-                        <PermissionToggle
-                          label="View Reports"
-                          checked={selectedGroup.permissions.canViewReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canViewReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Create Reports"
-                          checked={selectedGroup.permissions.canCreateReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canCreateReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Edit Reports"
-                          checked={selectedGroup.permissions.canEditReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canEditReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Delete Reports"
-                          checked={selectedGroup.permissions.canDeleteReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canDeleteReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Publish Reports"
-                          checked={selectedGroup.permissions.canPublishReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canPublishReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Share Reports"
-                          checked={selectedGroup.permissions.canShareReports}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canShareReports: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
+                      <h6 className="fw-semibold d-flex align-items-center gap-2 mb-2">
+                        <i className="fa-solid fa-file-lines"></i> Report Permissions
+                      </h6>
+                      <div className="card border rounded p-3">
+                        <PermissionToggle label="View Reports" checked={selectedGroup.permissions.canViewReports} onChange={v => updatePermission('canViewReports', v)} />
+                        <PermissionToggle label="Create Reports" checked={selectedGroup.permissions.canCreateReports} onChange={v => updatePermission('canCreateReports', v)} />
+                        <PermissionToggle label="Edit Reports" checked={selectedGroup.permissions.canEditReports} onChange={v => updatePermission('canEditReports', v)} />
+                        <PermissionToggle label="Delete Reports" checked={selectedGroup.permissions.canDeleteReports} onChange={v => updatePermission('canDeleteReports', v)} />
+                        <PermissionToggle label="Publish Reports" checked={selectedGroup.permissions.canPublishReports} onChange={v => updatePermission('canPublishReports', v)} />
+                        <PermissionToggle label="Share Reports" checked={selectedGroup.permissions.canShareReports} onChange={v => updatePermission('canShareReports', v)} />
                       </div>
                     </div>
 
                     {/* Connections */}
                     <div>
-                      <h3 className="font-semibold flex items-center gap-2 mb-3">
-                        <Database className="w-4 h-4" /> Connection Permissions
-                      </h3>
-                      <div className="border rounded-lg p-4 space-y-2">
-                        <PermissionToggle
-                          label="View Connections"
-                          checked={selectedGroup.permissions.canViewConnections}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canViewConnections: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Create Connections"
-                          checked={selectedGroup.permissions.canCreateConnections}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canCreateConnections: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Use Playground"
-                          description="Execute ad-hoc queries"
-                          checked={selectedGroup.permissions.canUsePlayground}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canUsePlayground: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="View Table Data"
-                          checked={selectedGroup.permissions.canViewTableData}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canViewTableData: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
+                      <h6 className="fw-semibold d-flex align-items-center gap-2 mb-2">
+                        <i className="fa-solid fa-database"></i> Connection Permissions
+                      </h6>
+                      <div className="card border rounded p-3">
+                        <PermissionToggle label="View Connections" checked={selectedGroup.permissions.canViewConnections} onChange={v => updatePermission('canViewConnections', v)} />
+                        <PermissionToggle label="Create Connections" checked={selectedGroup.permissions.canCreateConnections} onChange={v => updatePermission('canCreateConnections', v)} />
+                        <PermissionToggle label="Use Playground" description="Execute ad-hoc queries" checked={selectedGroup.permissions.canUsePlayground} onChange={v => updatePermission('canUsePlayground', v)} />
+                        <PermissionToggle label="View Table Data" checked={selectedGroup.permissions.canViewTableData} onChange={v => updatePermission('canViewTableData', v)} />
                       </div>
                     </div>
 
                     {/* Data & Export */}
                     <div>
-                      <h3 className="font-semibold flex items-center gap-2 mb-3">
-                        Data & Export Permissions
-                      </h3>
-                      <div className="border rounded-lg p-4 space-y-2">
-                        <PermissionToggle
-                          label="Upload Data"
-                          description="Upload Excel/CSV files"
-                          checked={selectedGroup.permissions.canUploadData}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canUploadData: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Export to Excel"
-                          checked={selectedGroup.permissions.canExportExcel}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canExportExcel: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Export to PDF"
-                          checked={selectedGroup.permissions.canExportPdf}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canExportPdf: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
-                        <PermissionToggle
-                          label="Create Embeds"
-                          description="Generate embed codes for reports"
-                          checked={selectedGroup.permissions.canCreateEmbeds}
-                          onChange={(v) => {
-                            const updated = { ...selectedGroup, permissions: { ...selectedGroup.permissions, canCreateEmbeds: v } };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
+                      <h6 className="fw-semibold mb-2">Data &amp; Export Permissions</h6>
+                      <div className="card border rounded p-3">
+                        <PermissionToggle label="Upload Data" description="Upload Excel/CSV files" checked={selectedGroup.permissions.canUploadData} onChange={v => updatePermission('canUploadData', v)} />
+                        <PermissionToggle label="Export to Excel" checked={selectedGroup.permissions.canExportExcel} onChange={v => updatePermission('canExportExcel', v)} />
+                        <PermissionToggle label="Export to PDF" checked={selectedGroup.permissions.canExportPdf} onChange={v => updatePermission('canExportPdf', v)} />
+                        <PermissionToggle label="Create Embeds" description="Generate embed codes for reports" checked={selectedGroup.permissions.canCreateEmbeds} onChange={v => updatePermission('canCreateEmbeds', v)} />
                       </div>
                     </div>
-                  </TabsContent>
+                  </div>
+                )}
 
-                  {/* Resources Tab */}
-                  <TabsContent value="resources" className="mt-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Assigned Connections */}
-                      <div className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold">Assigned Connections</h3>
-                          <Button size="sm" variant="outline">
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add
-                          </Button>
+                {/* Resources Tab */}
+                {activeTab === 'resources' && (
+                  <div className="row g-3">
+                    <div className="col-6">
+                      <div className="card border rounded p-3">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <h6 className="fw-semibold mb-0">Assigned Connections</h6>
+                          <button className="btn btn-outline-secondary btn-sm">
+                            <i className="fa-solid fa-plus me-1"></i>Add
+                          </button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="vstack gap-2">
                           {['Production DB', 'Analytics Warehouse', 'Sales CRM'].map((conn, i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-muted rounded">
-                              <div className="flex items-center gap-2">
-                                <Database className="w-4 h-4" />
+                            <div key={i} className="d-flex align-items-center justify-content-between p-2 bg-light rounded">
+                              <div className="d-flex align-items-center gap-2">
+                                <i className="fa-solid fa-database text-muted"></i>
                                 <span>{conn}</span>
                               </div>
-                              <Badge variant="outline">Execute</Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Assigned Reports */}
-                      <div className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold">Assigned Reports</h3>
-                          <Button size="sm" variant="outline">
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          {['Monthly Sales', 'Customer Analytics', 'Revenue Dashboard'].map((report, i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-muted rounded">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4" />
-                                <span>{report}</span>
-                              </div>
-                              <Badge variant="outline">View</Badge>
+                              <span className="badge bg-outline border text-muted">Execute</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
-                  </TabsContent>
-
-                  {/* Settings Tab */}
-                  <TabsContent value="settings" className="mt-4 space-y-4">
-                    <div className="border rounded-lg p-4 space-y-4">
-                      <h3 className="font-semibold">Entra ID Integration</h3>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Sync with Microsoft Entra</Label>
-                          <p className="text-xs text-muted-foreground">
-                            Automatically sync members from Azure AD group
-                          </p>
+                    <div className="col-6">
+                      <div className="card border rounded p-3">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <h6 className="fw-semibold mb-0">Assigned Reports</h6>
+                          <button className="btn btn-outline-secondary btn-sm">
+                            <i className="fa-solid fa-plus me-1"></i>Add
+                          </button>
                         </div>
-                        <Switch
-                          checked={selectedGroup.syncWithEntra}
-                          onCheckedChange={(v) => {
-                            const updated = { ...selectedGroup, syncWithEntra: v };
-                            setSelectedGroup(updated);
-                            setGroups(groups.map(g => g.id === updated.id ? updated : g));
-                          }}
-                        />
+                        <div className="vstack gap-2">
+                          {['Monthly Sales', 'Customer Analytics', 'Revenue Dashboard'].map((report, i) => (
+                            <div key={i} className="d-flex align-items-center justify-content-between p-2 bg-light rounded">
+                              <div className="d-flex align-items-center gap-2">
+                                <i className="fa-solid fa-file-lines text-muted"></i>
+                                <span>{report}</span>
+                              </div>
+                              <span className="badge bg-outline border text-muted">View</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Settings Tab */}
+                {activeTab === 'settings' && (
+                  <div className="vstack gap-3">
+                    <div className="card border rounded p-3">
+                      <h6 className="fw-semibold mb-3">Entra ID Integration</h6>
+                      <div className="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                          <div className="fw-medium">Sync with Microsoft Entra</div>
+                          <div className="small text-muted">Automatically sync members from Azure AD group</div>
+                        </div>
+                        <div className="form-check form-switch mb-0">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            checked={selectedGroup.syncWithEntra}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const updated = { ...selectedGroup, syncWithEntra: e.target.checked };
+                              setSelectedGroup(updated);
+                              setGroups(groups.map(g => g.id === updated.id ? updated : g));
+                            }}
+                          />
+                        </div>
                       </div>
                       {selectedGroup.syncWithEntra && (
                         <div>
-                          <Label>Entra Group ID</Label>
-                          <Input
-                            value={selectedGroup.entraGroupId || ''}
+                          <label className="form-label fw-medium">Entra Group ID</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            defaultValue={selectedGroup.entraGroupId || ''}
                             placeholder="Enter Azure AD Group Object ID"
                           />
                         </div>
                       )}
                     </div>
 
-                    <div className="border rounded-lg p-4 space-y-4">
-                      <h3 className="font-semibold">Group Hierarchy</h3>
-                      <div>
-                        <Label>Parent Group</Label>
-                        <select className="w-full mt-1 p-2 border rounded-md">
-                          <option value="">None (Top Level)</option>
-                          {groups.filter(g => g.id !== selectedGroup.id).map(g => (
-                            <option key={g.id} value={g.id}>{g.name}</option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Child groups inherit permissions from parent
-                        </p>
-                      </div>
+                    <div className="card border rounded p-3">
+                      <h6 className="fw-semibold mb-3">Group Hierarchy</h6>
+                      <label className="form-label fw-medium">Parent Group</label>
+                      <select className="form-select">
+                        <option value="">None (Top Level)</option>
+                        {groups.filter(g => g.id !== selectedGroup.id).map(g => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                      </select>
+                      <div className="form-text">Child groups inherit permissions from parent</div>
                     </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
-            <Card>
-              <CardContent className="p-12 text-center text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Select a group to view details</p>
-              </CardContent>
-            </Card>
+            <div className="card border-0 shadow-sm">
+              <div className="card-body p-5 text-center text-muted">
+                <i className="fa-solid fa-users fa-3x mb-3 opacity-25"></i>
+                <p className="mb-0">Select a group to view details</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Create Group Modal */}
+      {showCreateModal && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowCreateModal(false)}>
+          <div className="modal-dialog" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Create New Group</h5>
+                <button type="button" className="btn-close" onClick={() => setShowCreateModal(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label fw-medium">Group Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newGroup.name}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroup({ ...newGroup, name: e.target.value })}
+                    placeholder="e.g., Marketing Team"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-medium">Description</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newGroup.description}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroup({ ...newGroup, description: e.target.value })}
+                    placeholder="Brief description of this group"
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleCreateGroup} disabled={!newGroup.name}>
+                  Create Group
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

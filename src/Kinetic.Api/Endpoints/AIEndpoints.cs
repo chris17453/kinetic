@@ -102,7 +102,7 @@ public static class AIEndpoints
     }
 
     private static async Task<IResult> ExplainQuery(
-        [FromBody] ExplainQueryRequest request,
+        [FromBody] AiExplainQueryRequest request,
         IAIService aiService,
         CancellationToken ct)
     {
@@ -149,7 +149,7 @@ public record ColumnInfoDto
     public int? DistinctValues { get; init; }
 }
 
-public record ExplainQueryRequest
+public record AiExplainQueryRequest
 {
     public string Sql { get; init; } = string.Empty;
     public string DatabaseType { get; init; } = "SQL Server";

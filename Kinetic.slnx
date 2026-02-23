@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Kinetic.Adapters.Tests/Kinetic.Adapters.Tests.csproj" />
+    <Project Path="tests/Kinetic.Api.IntegrationTests/Kinetic.Api.IntegrationTests.csproj" />
     <Project Path="tests/Kinetic.Api.Tests/Kinetic.Api.Tests.csproj" />
     <Project Path="tests/Kinetic.Core.Tests/Kinetic.Core.Tests.csproj" />
   </Folder>

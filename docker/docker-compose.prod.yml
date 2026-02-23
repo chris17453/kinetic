@@ -22,6 +22,7 @@ services:
       - EntraId__ClientId=${ENTRA_CLIENT_ID}
       - EntraId__ClientSecret=${ENTRA_CLIENT_SECRET}
       - Encryption__Key=${ENCRYPTION_KEY}
+      - Redis__Password=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - TempCache__SchemaName=kinetic_cache
       - ScheduledJobs__EnableEntraSync=${ENABLE_ENTRA_SYNC:-false}
     depends_on:
@@ -62,7 +63,7 @@ services:
       - "1433:1433"
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-KineticDev123!}
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}
       - MSSQL_PID=Express
     volumes:
       - mssql_data:/var/opt/mssql
@@ -81,7 +82,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

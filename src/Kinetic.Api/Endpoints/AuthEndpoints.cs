@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.AspNetCore.Mvc;
 using Kinetic.Identity.Services;
 
@@ -7,7 +8,9 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth").WithTags("Auth");
+        var group = app.MapGroup("/api/auth")
+            .RequireRateLimiting("auth")
+            .WithTags("Auth");
 
         group.MapPost("/register", Register)
             .WithName("Register")
@@ -32,6 +35,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Register(
         [FromBody] RegisterRequest request,
+        HttpContext context,
         IAuthService authService)
     {
         var result = await authService.RegisterAsync(request);
@@ -40,6 +44,25 @@ public static class AuthEndpoints
         {
             return Results.BadRequest(new { error = result.Error });
         }
+
+        // Set HttpOnly cookie for access token (XSS protection)
+        context.Response.Cookies.Append("kinetic_access_token", result.AccessToken!, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddHours(1),
+            Path = "/"
+        });
+
+        context.Response.Cookies.Append("kinetic_refresh_token", result.RefreshToken!, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddDays(7),
+            Path = "/api/auth/refresh"
+        });
 
         return Results.Ok(new
         {
@@ -51,6 +74,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Login(
         [FromBody] LoginRequest request,
+        HttpContext context,
         IAuthService authService)
     {
         var result = await authService.LoginAsync(request);
@@ -59,6 +83,25 @@ public static class AuthEndpoints
         {
             return Results.BadRequest(new { error = result.Error });
         }
+
+        // Set HttpOnly cookie for access token (XSS protection)
+        context.Response.Cookies.Append("kinetic_access_token", result.AccessToken!, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddHours(1),
+            Path = "/"
+        });
+
+        context.Response.Cookies.Append("kinetic_refresh_token", result.RefreshToken!, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddDays(7),
+            Path = "/api/auth/refresh"
+        });
 
         return Results.Ok(new
         {
@@ -114,6 +157,28 @@ public static class AuthEndpoints
         {
             await authService.RevokeRefreshTokenAsync(userId);
         }
+
+        // Blacklist the JWT by JTI in Redis
+        var jti = context.User.FindFirst("jti")?.Value;
+        if (!string.IsNullOrEmpty(jti))
+        {
+            var cache = context.RequestServices.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
+            if (cache != null)
+            {
+                // Store for 1 hour (match default JWT expiry) - token cannot be used after this
+                await cache.SetStringAsync(
+                    $"kinetic:revoked:{jti}",
+                    "1",
+                    new Microsoft.Extensions.Caching.Distributed.DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
+                    });
+            }
+        }
+
+        // Clear HttpOnly auth cookies
+        context.Response.Cookies.Delete("kinetic_access_token");
+        context.Response.Cookies.Delete("kinetic_refresh_token");
 
         return Results.Ok();
     }
