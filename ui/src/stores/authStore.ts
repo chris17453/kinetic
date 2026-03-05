@@ -33,7 +33,9 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('kinetic_token', token);
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'Login failed';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const axiosErr = err as any;
+          const message = axiosErr?.response?.data?.error || (err instanceof Error ? err.message : 'Login failed');
           set({ error: message, isLoading: false });
           throw err;
         }

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Kinetic.Identity.Services;
 using Kinetic.Core.Domain.Identity;
+using Kinetic.Data;
 
 namespace Kinetic.Api.Endpoints;
 
@@ -8,6 +10,17 @@ public static class UserEndpoints
 {
     public static void MapUserEndpoints(this IEndpointRouteBuilder app)
     {
+        // Current user endpoints (any authenticated user)
+        var me = app.MapGroup("/api/users/me")
+            .WithTags("Users")
+            .RequireAuthorization();
+
+        me.MapGet("/", GetCurrentUser).WithName("GetCurrentUserProfile");
+        me.MapPut("/", UpdateCurrentUser).WithName("UpdateCurrentUser");
+        me.MapPut("/password", ChangePassword).WithName("ChangePassword");
+        me.MapGet("/groups", GetCurrentUserGroups).WithName("GetCurrentUserGroups");
+
+        // Admin user management endpoints
         var group = app.MapGroup("/api/users")
             .WithTags("Users")
             .RequireAuthorization("CanManageUsers");
@@ -25,9 +38,9 @@ public static class UserEndpoints
     }
 
     private static async Task<IResult> GetUsers(
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
-        IUserService userService)
+        IUserService userService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
     {
         page = page <= 0 ? 1 : page;
         pageSize = pageSize <= 0 ? 25 : Math.Min(pageSize, 100);
@@ -96,6 +109,104 @@ public static class UserEndpoints
         return success ? Results.Ok() : Results.NotFound();
     }
 
+    private static async Task<IResult> GetCurrentUser(
+        HttpContext context,
+        IUserService userService)
+    {
+        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+            return Results.Unauthorized();
+
+        var user = await userService.GetUserByIdAsync(userId);
+        if (user == null) return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            id = user.Id,
+            email = user.Email,
+            displayName = user.DisplayName,
+            avatarUrl = user.AvatarUrl,
+            timezone = user.Timezone ?? "UTC",
+            themeMode = user.ThemeMode.ToString().ToLowerInvariant(),
+            department = user.Department != null ? new
+            {
+                id = user.Department.Id,
+                name = user.Department.Name
+            } : null,
+            createdAt = user.CreatedAt
+        });
+    }
+
+    private static async Task<IResult> UpdateCurrentUser(
+        HttpContext context,
+        [FromBody] UpdateProfileRequest request,
+        KineticDbContext db)
+    {
+        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+            return Results.Unauthorized();
+
+        var user = await db.Users.FindAsync(userId);
+        if (user == null) return Results.NotFound();
+
+        if (request.DisplayName != null)
+            user.DisplayName = request.DisplayName;
+        if (request.Timezone != null)
+            user.Timezone = request.Timezone;
+        if (request.ThemeMode != null && Enum.TryParse<ThemeMode>(request.ThemeMode, true, out var mode))
+            user.ThemeMode = mode;
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return Results.Ok(new { id = user.Id, displayName = user.DisplayName, timezone = user.Timezone });
+    }
+
+    private static async Task<IResult> ChangePassword(
+        HttpContext context,
+        [FromBody] ChangePasswordRequest request,
+        KineticDbContext db,
+        IPasswordService passwordService)
+    {
+        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+            return Results.Unauthorized();
+
+        var user = await db.Users.FindAsync(userId);
+        if (user == null) return Results.NotFound();
+
+        // Verify current password
+        if (user.PasswordHash == null || !passwordService.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+            return Results.BadRequest(new { error = "Current password is incorrect" });
+
+        // Validate new password
+        if (!passwordService.IsPasswordStrong(request.NewPassword, out var error))
+            return Results.BadRequest(new { error });
+
+        user.PasswordHash = passwordService.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return Results.Ok(new { message = "Password updated" });
+    }
+
+    private static async Task<IResult> GetCurrentUserGroups(
+        HttpContext context,
+        IUserService userService)
+    {
+        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+            return Results.Unauthorized();
+
+        var groups = await userService.GetUserGroupsAsync(userId);
+        return Results.Ok(groups.Select(g => new
+        {
+            id = g.Id,
+            name = g.Name,
+            description = g.Description
+        }));
+    }
+
     private static async Task<IResult> GetUserGroups(Guid id, IUserService userService)
     {
         var groups = await userService.GetUserGroupsAsync(id);
@@ -154,3 +265,6 @@ public static class UserEndpoints
         };
     }
 }
+
+public record UpdateProfileRequest(string? DisplayName = null, string? Timezone = null, string? ThemeMode = null);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);

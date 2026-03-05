@@ -19,7 +19,11 @@ export function LoginPage() {
   const { branding, fetchBranding } = useBrandingStore();
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
-  useEffect(() => { if (orgSlug) fetchBranding(orgSlug); }, [orgSlug, fetchBranding]);
+  const { fetchGlobalBranding } = useBrandingStore();
+  useEffect(() => {
+    if (orgSlug) fetchBranding(orgSlug);
+    else fetchGlobalBranding();
+  }, [orgSlug, fetchBranding, fetchGlobalBranding]);
 
   const onSubmit = async (data: LoginFormValues) => {
     try { await login(data.email, data.password); navigate('/'); } catch {}
@@ -35,10 +39,28 @@ export function LoginPage() {
       {/* Left brand panel - hidden on mobile */}
       <div
         className="d-none d-lg-flex flex-column justify-content-between p-5 text-white"
-        style={{ width: '45%', background: `linear-gradient(135deg, ${primaryColor} 0%, #1e40af 100%)` }}
+        style={{
+          width: '45%',
+          background: branding?.loginBackgroundUrl
+            ? `url(${branding.loginBackgroundUrl}) center/cover no-repeat`
+            : `linear-gradient(135deg, ${primaryColor} 0%, #1e40af 100%)`,
+        }}
       >
         <div className="d-flex align-items-center">
-          <img src="/logo-full.png" alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          {branding?.useTextLogo ? (
+            <span style={{
+              fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+              fontSize: branding.logoTextSize || '1.5rem',
+              color: '#fff',
+              fontWeight: 700,
+            }}>
+              {branding.logoText || orgName}
+            </span>
+          ) : branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          ) : (
+            <img src="/logo-full.png" alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          )}
         </div>
         <div>
           <h2 className="fw-bold display-6 mb-3">Powerful reporting,<br />built for your team.</h2>
@@ -60,7 +82,20 @@ export function LoginPage() {
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Mobile logo */}
           <div className="d-lg-none text-center mb-4">
-            <img src="/logo-full.png" alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            {branding?.useTextLogo ? (
+              <span style={{
+                fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                fontSize: branding.logoTextSize || '1.5rem',
+                color: branding.logoTextColor || primaryColor,
+                fontWeight: 700,
+              }}>
+                {branding.logoText || orgName}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            ) : (
+              <img src="/logo-full.png" alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            )}
           </div>
 
           <div className="card border-0 shadow-sm p-4">

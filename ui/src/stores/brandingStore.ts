@@ -46,6 +46,14 @@ export interface OrganizationBranding {
   monoFontFamily: string;
   customCss?: string;
   
+  // Text logo
+  useTextLogo?: boolean;
+  logoText?: string;
+  logoTextFont?: string;
+  logoTextSize?: string;
+  logoTextColor?: string;
+  logoTextDarkColor?: string;
+
   // Settings
   allowLocalUsers: boolean;
   allowEntraId: boolean;
@@ -80,6 +88,12 @@ const defaultBranding: OrganizationBranding = {
   fontFamily: 'Inter, system-ui, sans-serif',
   headingFontFamily: 'Inter, system-ui, sans-serif',
   monoFontFamily: 'JetBrains Mono, monospace',
+  useTextLogo: false,
+  logoText: 'Kinetic',
+  logoTextFont: 'Inter, system-ui, sans-serif',
+  logoTextSize: '1.5rem',
+  logoTextColor: '#3B82F6',
+  logoTextDarkColor: '#60A5FA',
   allowLocalUsers: true,
   allowEntraId: true,
   requireMfa: false,
@@ -93,6 +107,7 @@ interface BrandingState {
   isDarkMode: boolean;
   
   fetchBranding: (orgSlug: string) => Promise<void>;
+  fetchGlobalBranding: () => Promise<void>;
   setBranding: (branding: OrganizationBranding) => void;
   clearBranding: () => void;
   toggleDarkMode: () => void;
@@ -129,19 +144,38 @@ export const useBrandingStore = create<BrandingState>()(
       fetchBranding: async (orgSlug: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.get<OrganizationBranding>(`/api/organizations/slug/${orgSlug}/branding`);
-          set({ 
-            branding: response.data, 
-            isLoaded: true, 
-            isLoading: false 
+          const response = await api.get<OrganizationBranding>(`/organizations/slug/${orgSlug}/branding`);
+          set({
+            branding: response.data,
+            isLoaded: true,
+            isLoading: false
           });
         } catch (err: any) {
           // Fall back to default branding if org not found
-          set({ 
+          set({
             branding: { ...defaultBranding, orgSlug },
-            isLoaded: true, 
+            isLoaded: true,
             isLoading: false,
-            error: err.message 
+            error: err.message
+          });
+        }
+      },
+
+      fetchGlobalBranding: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await api.get<OrganizationBranding>('/organizations/branding');
+          set({
+            branding: response.data,
+            isLoaded: true,
+            isLoading: false
+          });
+        } catch (err: any) {
+          set({
+            branding: { ...defaultBranding },
+            isLoaded: true,
+            isLoading: false,
+            error: err.message
           });
         }
       },
@@ -220,6 +254,9 @@ export const useBrandingStore = create<BrandingState>()(
           '--font-family': b.fontFamily,
           '--font-family-heading': b.headingFontFamily,
           '--font-family-mono': b.monoFontFamily,
+          '--logo-text-font': b.logoTextFont || b.fontFamily,
+          '--logo-text-size': b.logoTextSize || '1.5rem',
+          '--logo-text-color': b.logoTextColor || colors.primary,
         };
       },
     }),

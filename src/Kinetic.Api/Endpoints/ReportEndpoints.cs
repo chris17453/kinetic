@@ -5,6 +5,7 @@ using Kinetic.Api.Services;
 using Kinetic.Core.Domain;
 using Kinetic.Core.Domain.Reports;
 using Kinetic.Queue.Messages;
+using Kinetic.Adapters.Core;
 using MassTransit;
 
 namespace Kinetic.Api.Endpoints;
@@ -38,7 +39,17 @@ public static class ReportEndpoints
         
         // Favorites
         group.MapPost("/{id:guid}/favorite", ToggleFavorite).WithName("ToggleFavorite");
+        group.MapDelete("/{id:guid}/favorite", RemoveFavorite).WithName("RemoveFavorite");
         group.MapGet("/favorites", GetFavorites).WithName("GetFavorites");
+
+        // Ratings
+        group.MapPost("/{id:guid}/rate", RateReport).WithName("RateReport");
+
+        // Tags
+        group.MapGet("/tags", GetTags).WithName("GetTags");
+
+        // Execute (frontend-facing alias for /api/query/execute/{reportId})
+        group.MapPost("/{id:guid}/execute", ExecuteReport).WithName("ExecuteReportViaReports");
         
         // Categories
         group.MapGet("/categories", GetCategories).WithName("GetCategories");
@@ -231,6 +242,24 @@ public static class ReportEndpoints
         return Results.Ok(new { isFavorite });
     }
 
+    private static async Task<IResult> RemoveFavorite(
+        Guid id,
+        HttpContext context,
+        KineticDbContext db)
+    {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+
+        var fav = await db.UserFavorites
+            .FirstOrDefaultAsync(f => f.ReportId == id && f.UserId == userId.Value);
+        if (fav != null)
+        {
+            db.UserFavorites.Remove(fav);
+            await db.SaveChangesAsync();
+        }
+        return Results.Ok(new { isFavorite = false });
+    }
+
     private static async Task<IResult> GetFavorites(
         HttpContext context,
         IReportService reportService)
@@ -240,6 +269,90 @@ public static class ReportEndpoints
 
         var favorites = await reportService.GetFavoritesAsync(userId.Value);
         return Results.Ok(favorites.Select(MapReport));
+    }
+
+    private static async Task<IResult> RateReport(
+        Guid id,
+        [FromBody] RateReportRequest request,
+        HttpContext context,
+        KineticDbContext db)
+    {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+
+        var existing = await db.ReportRatings
+            .FirstOrDefaultAsync(r => r.ReportId == id && r.UserId == userId.Value);
+
+        if (existing != null)
+        {
+            existing.Rating = request.Rating;
+            existing.RatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            db.ReportRatings.Add(new Core.Domain.Reports.ReportRating
+            {
+                UserId = userId.Value,
+                ReportId = id,
+                Rating = request.Rating,
+                RatedAt = DateTime.UtcNow
+            });
+        }
+
+        await db.SaveChangesAsync();
+        return Results.Ok(new { rating = request.Rating });
+    }
+
+    private static async Task<IResult> GetTags(KineticDbContext db)
+    {
+        var tags = await db.Reports
+            .Where(r => r.IsActive)
+            .Select(r => r.Tags)
+            .ToListAsync();
+
+        var distinct = tags.Where(t => t.Count > 0).SelectMany(t => t).Distinct().OrderBy(t => t).ToList();
+        return Results.Ok(distinct);
+    }
+
+    private static async Task<IResult> ExecuteReport(
+        Guid id,
+        [FromBody] ExecuteReportApiRequest request,
+        HttpContext context,
+        IQueryService queryService)
+    {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+
+        var result = await queryService.ExecuteReportAsync(
+            id, request.Parameters ?? new(), userId.Value,
+            request.Page, request.PageSize, request.IncludeTotalCount ?? false);
+
+        if (!result.Success)
+        {
+            return Results.BadRequest(new
+            {
+                success = false,
+                error = result.Error,
+                errorCode = result.ErrorCode
+            });
+        }
+
+        return Results.Ok(new
+        {
+            success = true,
+            columns = result.Columns.Select(c => new
+            {
+                name = c.Name,
+                dataType = c.DataType,
+                clrType = c.ClrType.Name
+            }),
+            rows = result.Rows,
+            rowsReturned = result.RowsReturned,
+            totalRows = result.TotalRows,
+            hasMore = result.HasMore,
+            executionTimeMs = result.ExecutionTime.TotalMilliseconds,
+            executedAt = result.ExecutedAt
+        });
     }
 
     private static async Task<IResult> GetCategories(IReportService reportService)
@@ -436,3 +549,5 @@ public record ScheduleReportRequest
     public Dictionary<string, object?>? Parameters { get; init; }
     public DateTime? ScheduledFor { get; init; }
 }
+
+public record RateReportRequest(int Rating);

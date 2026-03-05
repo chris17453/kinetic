@@ -23,16 +23,17 @@ public static class ConnectionEndpoints
         group.MapPost("/test", TestConnectionString).WithName("TestConnectionString");
         
         group.MapGet("/{id:guid}/schema", GetSchema).WithName("GetConnectionSchema");
+        group.MapGet("/{id:guid}/tables", GetTables).WithName("GetConnectionTables");
         group.MapGet("/{id:guid}/tables/{tableName}/columns", GetTableColumns).WithName("GetTableColumns");
         
         group.MapGet("/types", GetConnectionTypes).WithName("GetConnectionTypes");
     }
 
     private static async Task<IResult> GetConnections(
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
         HttpContext context,
-        IConnectionService connectionService)
+        IConnectionService connectionService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
     {
         var userId = GetUserId(context);
         if (userId == null) return Results.Unauthorized();
@@ -130,6 +131,19 @@ public static class ConnectionEndpoints
         {
             var schema = await connectionService.GetSchemaAsync(id);
             return Results.Ok(schema);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.NotFound(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> GetTables(Guid id, IConnectionService connectionService)
+    {
+        try
+        {
+            var schema = await connectionService.GetSchemaAsync(id);
+            return Results.Ok(schema.Tables);
         }
         catch (InvalidOperationException ex)
         {

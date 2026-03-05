@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Kinetic.Core.Domain.Identity;
 using Kinetic.Data;
@@ -13,6 +15,8 @@ public interface IAuthService
     Task<bool> RevokeRefreshTokenAsync(Guid userId);
     Task<User?> GetUserByIdAsync(Guid userId);
     Task<User?> GetUserByEmailAsync(string email);
+    Task<PasswordResetResult> RequestPasswordResetAsync(string email, string baseUrl);
+    Task<PasswordResetResult> ResetPasswordAsync(string email, string token, string newPassword);
 }
 
 public class AuthService : IAuthService
@@ -21,6 +25,7 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly IPasswordService _passwordService;
     private readonly IPermissionService _permissionService;
+    private readonly IEmailService _emailService;
     private readonly JwtSettings _settings;
 
     public AuthService(
@@ -28,12 +33,14 @@ public class AuthService : IAuthService
         ITokenService tokenService,
         IPasswordService passwordService,
         IPermissionService permissionService,
+        IEmailService emailService,
         JwtSettings settings)
     {
         _db = db;
         _tokenService = tokenService;
         _passwordService = passwordService;
         _permissionService = permissionService;
+        _emailService = emailService;
         _settings = settings;
     }
 
@@ -191,11 +198,98 @@ public class AuthService : IAuthService
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Email == email.ToLowerInvariant());
     }
+
+    public async Task<PasswordResetResult> RequestPasswordResetAsync(string email, string baseUrl)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email.ToLowerInvariant());
+
+        if (user == null || !user.IsActive || user.Provider != AuthProvider.Local)
+        {
+            // If SMTP configured: generic message (no email enumeration)
+            if (_emailService.IsConfigured)
+                return PasswordResetResult.Success("If an account with that email exists, a password reset link has been sent.");
+
+            // Dev mode: tell them the user wasn't found
+            return PasswordResetResult.Failure("No active local account found with that email address.");
+        }
+
+        // Rate limit: 2 minutes between requests
+        if (user.PasswordResetRequestedAt.HasValue &&
+            (DateTime.UtcNow - user.PasswordResetRequestedAt.Value).TotalMinutes < 2)
+        {
+            if (_emailService.IsConfigured)
+                return PasswordResetResult.Success("If an account with that email exists, a password reset link has been sent.");
+
+            return PasswordResetResult.Failure("Please wait 2 minutes before requesting another reset.");
+        }
+
+        // Generate token
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var rawToken = Convert.ToBase64String(tokenBytes);
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken))).ToLowerInvariant();
+
+        user.PasswordResetTokenHash = tokenHash;
+        user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+        user.PasswordResetRequestedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var resetUrl = $"{baseUrl.TrimEnd('/')}/reset-password?email={Uri.EscapeDataString(user.Email)}&token={Uri.EscapeDataString(rawToken)}";
+
+        if (_emailService.IsConfigured)
+        {
+            await _emailService.SendPasswordResetEmailAsync(user.Email, resetUrl);
+            return PasswordResetResult.Success("If an account with that email exists, a password reset link has been sent.");
+        }
+
+        // Dev mode: return the URL directly
+        return PasswordResetResult.Success("Reset link generated (SMTP not configured).", resetUrl);
+    }
+
+    public async Task<PasswordResetResult> ResetPasswordAsync(string email, string token, string newPassword)
+    {
+        if (!_passwordService.IsPasswordStrong(newPassword, out var passwordError))
+            return PasswordResetResult.Failure(passwordError!);
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email.ToLowerInvariant());
+
+        if (user == null)
+        {
+            if (_emailService.IsConfigured)
+                return PasswordResetResult.Failure("Invalid or expired reset link.");
+            return PasswordResetResult.Failure("No account found with that email address.");
+        }
+
+        if (string.IsNullOrEmpty(user.PasswordResetTokenHash) || !user.PasswordResetTokenExpiresAt.HasValue)
+            return PasswordResetResult.Failure("Invalid or expired reset link.");
+
+        if (user.PasswordResetTokenExpiresAt.Value < DateTime.UtcNow)
+            return PasswordResetResult.Failure("This reset link has expired. Please request a new one.");
+
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+        if (tokenHash != user.PasswordResetTokenHash)
+            return PasswordResetResult.Failure("Invalid or expired reset link.");
+
+        // Update password, clear reset fields, clear lockout
+        user.PasswordHash = _passwordService.HashPassword(newPassword);
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
+        user.PasswordResetRequestedAt = null;
+        user.IsLocked = false;
+        user.LockedUntil = null;
+        user.FailedLoginAttempts = 0;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return PasswordResetResult.Success("Your password has been reset. You can now sign in with your new password.");
+    }
 }
 
 // DTOs
 public record RegisterRequest(string Email, string Password, string DisplayName);
 public record LoginRequest(string Email, string Password);
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Email, string Token, string NewPassword);
 
 public class AuthResult
 {
@@ -219,6 +313,33 @@ public class AuthResult
     public static AuthResult Failure(string error)
     {
         return new AuthResult
+        {
+            Succeeded = false,
+            Error = error
+        };
+    }
+}
+
+public class PasswordResetResult
+{
+    public bool Succeeded { get; private set; }
+    public string? Message { get; private set; }
+    public string? Error { get; private set; }
+    public string? ResetUrl { get; private set; }
+
+    public static PasswordResetResult Success(string message, string? resetUrl = null)
+    {
+        return new PasswordResetResult
+        {
+            Succeeded = true,
+            Message = message,
+            ResetUrl = resetUrl
+        };
+    }
+
+    public static PasswordResetResult Failure(string error)
+    {
+        return new PasswordResetResult
         {
             Succeeded = false,
             Error = error

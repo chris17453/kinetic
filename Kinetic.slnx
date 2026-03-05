@@ -8,6 +8,7 @@
     <Project Path="src/Kinetic.Ingest/Kinetic.Ingest.csproj" />
     <Project Path="src/Kinetic.Queue/Kinetic.Queue.csproj" />
     <Project Path="src/Kinetic.Store/Kinetic.Store.csproj" />
+    <Project Path="src/Kinetic.Worker/Kinetic.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Kinetic.Adapters.Tests/Kinetic.Adapters.Tests.csproj" />

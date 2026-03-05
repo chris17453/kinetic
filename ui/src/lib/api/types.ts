@@ -66,7 +66,7 @@ export type ConnectionType =
   | 'SqlServer'
   | 'SQLite'
   | 'Oracle'
-  | 'DuckDB'
+  | 'MongoDB'
   | 'ClickHouse'
   | 'Snowflake'
   | 'BigQuery'

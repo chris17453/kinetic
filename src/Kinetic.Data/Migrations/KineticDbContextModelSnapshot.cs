@@ -33,6 +33,9 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("int");
+
                     b.Property<Guid?>("EntityId")
                         .HasColumnType("uniqueidentifier");
 
@@ -54,6 +57,9 @@ namespace Kinetic.Data.Migrations
 
                     b.Property<string>("OldValues")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("datetime2");
@@ -110,6 +116,9 @@ namespace Kinetic.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uniqueidentifier");
@@ -175,16 +184,34 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("CostCenter")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ManagerId")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("ParentId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -202,10 +229,16 @@ namespace Kinetic.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Color")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("DepartmentId1")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Description")
@@ -216,6 +249,12 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("Icon")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsSystem")
                         .HasColumnType("bit");
 
@@ -224,9 +263,17 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("DepartmentId1");
 
                     b.HasIndex("ExternalId");
 
@@ -250,6 +297,41 @@ namespace Kinetic.Data.Migrations
                     b.ToTable("GroupPermissions", (string)null);
                 });
 
+            modelBuilder.Entity("Kinetic.Core.Domain.Identity.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens", (string)null);
+                });
+
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -266,6 +348,9 @@ namespace Kinetic.Data.Migrations
                     b.Property<Guid?>("DepartmentId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("DepartmentId1")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -280,15 +365,58 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<int>("FailedLoginAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FirstName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsLocked")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("LastLoginIp")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LastName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Locale")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("MfaEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MfaSecret")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("PasswordResetRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordResetTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PreferencesJson")
                         .HasColumnType("nvarchar(max)");
@@ -296,9 +424,23 @@ namespace Kinetic.Data.Migrations
                     b.Property<int>("Provider")
                         .HasColumnType("int");
 
+                    b.Property<int>("ThemeMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Timezone")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("DepartmentId1");
 
                     b.HasIndex("Email")
                         .IsUnique();
@@ -329,6 +471,57 @@ namespace Kinetic.Data.Migrations
                     b.ToTable("UserGroups", (string)null);
                 });
 
+            modelBuilder.Entity("Kinetic.Core.Domain.QueryExecutionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("QueryHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid?>("ReportId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("RowsReturned")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("WasCached")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("ExecutedAt");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("QueryExecutionLogs", (string)null);
+                });
+
             modelBuilder.Entity("Kinetic.Core.Domain.Reports.Category", b =>
                 {
                     b.Property<Guid>("Id")
@@ -338,6 +531,12 @@ namespace Kinetic.Data.Migrations
                     b.Property<string>("Color")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
@@ -351,12 +550,89 @@ namespace Kinetic.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
                         .IsUnique();
 
+                    b.HasIndex("ParentId");
+
                     b.ToTable("Categories", (string)null);
+                });
+
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.EmbedToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AllowedDomains")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("DefaultParameters")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("MaxExecutionsPerHour")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("ShowExport")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ShowParameters")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ShowTitle")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("UsageCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("EmbedTokens", (string)null);
                 });
 
             modelBuilder.Entity("Kinetic.Core.Domain.Reports.Report", b =>
@@ -368,6 +644,9 @@ namespace Kinetic.Data.Migrations
                     b.Property<bool>("AllowEmbed")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AutoRun")
+                        .HasColumnType("bit");
+
                     b.Property<int>("CacheMode")
                         .HasColumnType("int");
 
@@ -375,6 +654,9 @@ namespace Kinetic.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CategoryId1")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Columns")
@@ -397,8 +679,8 @@ namespace Kinetic.Data.Migrations
                     b.Property<int>("ExecutionCount")
                         .HasColumnType("int");
 
-                    b.Property<int>("ExecutionMode")
-                        .HasColumnType("int");
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsFeatured")
                         .HasColumnType("bit");
@@ -410,6 +692,9 @@ namespace Kinetic.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uniqueidentifier");
@@ -424,6 +709,10 @@ namespace Kinetic.Data.Migrations
                     b.Property<string>("QueryText")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RowFilterExpression")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -451,6 +740,8 @@ namespace Kinetic.Data.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("CategoryId1");
+
                     b.HasIndex("ConnectionId");
 
                     b.HasIndex("OwnerId");
@@ -469,6 +760,9 @@ namespace Kinetic.Data.Migrations
                     b.Property<Guid>("ReportId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("RatedAt")
                         .HasColumnType("datetime2");
 
@@ -476,6 +770,8 @@ namespace Kinetic.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("UserId", "ReportId");
+
+                    b.HasIndex("ReportId");
 
                     b.ToTable("ReportRatings", (string)null);
                 });
@@ -488,12 +784,263 @@ namespace Kinetic.Data.Migrations
                     b.Property<Guid>("ReportId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime>("AddedAt")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("UserId", "ReportId");
 
+                    b.HasIndex("ReportId");
+
                     b.ToTable("UserFavorites", (string)null);
+                });
+
+            modelBuilder.Entity("Kinetic.Core.Domain.SiteBranding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccentColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("AllowEntraId")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AllowLocalUsers")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("BackgroundColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("BorderColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("CustomCss")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DarkAccentColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkBackgroundColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkBorderColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkPrimaryColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkSecondaryColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkSurfaceColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkTextColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DarkTextMutedColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DashboardBackgroundUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<bool>("DefaultCanCreateConnections")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DefaultCanCreateReports")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DefaultCanExport")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DefaultCanUploadData")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableAiAssistant")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableDataUpload")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableEmbedding")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableExportExcel")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableExportPdf")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableQueryPlayground")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnableReportBuilder")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ErrorColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("FaviconUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("FontFamily")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("HeadingFontFamily")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("InfoColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("LoginBackgroundUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("LogoDarkUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("LogoLightUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("LogoText")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("LogoTextColor")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("LogoTextDarkColor")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("LogoTextFont")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("LogoTextSize")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("LogoUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<int>("MaxConnectionsPerGroup")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxQueryResultRows")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxReportsPerGroup")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxUploadSizeMb")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MonoFontFamily")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("OrgName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("OrgSlug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("PrimaryColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("RequireMfa")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("SecondaryColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("SessionTimeoutMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SuccessColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("SurfaceColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TempDataRetentionHours")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TextColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("TextMutedColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("UseTextLogo")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("WarningColor")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SiteBranding", (string)null);
                 });
 
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.Department", b =>
@@ -513,6 +1060,10 @@ namespace Kinetic.Data.Migrations
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Kinetic.Core.Domain.Identity.Department", null)
+                        .WithMany("Groups")
+                        .HasForeignKey("DepartmentId1");
+
                     b.Navigation("Department");
                 });
 
@@ -527,12 +1078,27 @@ namespace Kinetic.Data.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("Kinetic.Core.Domain.Identity.RefreshToken", b =>
+                {
+                    b.HasOne("Kinetic.Core.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.User", b =>
                 {
                     b.HasOne("Kinetic.Core.Domain.Identity.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Kinetic.Core.Domain.Identity.Department", null)
+                        .WithMany("Users")
+                        .HasForeignKey("DepartmentId1");
 
                     b.Navigation("Department");
                 });
@@ -556,12 +1122,44 @@ namespace Kinetic.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.Category", b =>
+                {
+                    b.HasOne("Kinetic.Core.Domain.Reports.Category", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId");
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.EmbedToken", b =>
+                {
+                    b.HasOne("Kinetic.Core.Domain.Identity.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Kinetic.Core.Domain.Reports.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("Kinetic.Core.Domain.Reports.Report", b =>
                 {
                     b.HasOne("Kinetic.Core.Domain.Reports.Category", "Category")
                         .WithMany()
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Kinetic.Core.Domain.Reports.Category", null)
+                        .WithMany("Reports")
+                        .HasForeignKey("CategoryId1");
 
                     b.HasOne("Kinetic.Core.Domain.Connections.Connection", "Connection")
                         .WithMany()
@@ -574,9 +1172,35 @@ namespace Kinetic.Data.Migrations
                     b.Navigation("Connection");
                 });
 
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.ReportRating", b =>
+                {
+                    b.HasOne("Kinetic.Core.Domain.Reports.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.UserFavorite", b =>
+                {
+                    b.HasOne("Kinetic.Core.Domain.Reports.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.Department", b =>
                 {
                     b.Navigation("Children");
+
+                    b.Navigation("Groups");
+
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.Group", b =>
@@ -589,6 +1213,13 @@ namespace Kinetic.Data.Migrations
             modelBuilder.Entity("Kinetic.Core.Domain.Identity.User", b =>
                 {
                     b.Navigation("UserGroups");
+                });
+
+            modelBuilder.Entity("Kinetic.Core.Domain.Reports.Category", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Reports");
                 });
 #pragma warning restore 612, 618
         }

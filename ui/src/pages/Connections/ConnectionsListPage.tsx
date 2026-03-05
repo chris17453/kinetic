@@ -9,12 +9,12 @@ import { Breadcrumb } from '../../components/common';
 const typeIcon: Record<string, string> = {
   PostgreSQL: 'fa-elephant', MySQL: 'fa-dolphin', SqlServer: 'fa-database',
   SQLite: 'fa-file-alt', Oracle: 'fa-columns', BigQuery: 'fa-google',
-  Snowflake: 'fa-snowflake', ClickHouse: 'fa-server', DuckDB: 'fa-database', Custom: 'fa-cog',
+  Snowflake: 'fa-snowflake', ClickHouse: 'fa-server', MongoDB: 'fa-leaf', Custom: 'fa-cog',
 };
 const typeBadge: Record<string, string> = {
   PostgreSQL: 'bg-info', MySQL: 'bg-warning', SqlServer: 'bg-primary',
   SQLite: 'bg-secondary', Oracle: 'bg-danger', BigQuery: 'bg-success',
-  Snowflake: 'bg-primary', ClickHouse: 'bg-warning', DuckDB: 'bg-info', Custom: 'bg-secondary',
+  Snowflake: 'bg-primary', ClickHouse: 'bg-warning', MongoDB: 'bg-success', Custom: 'bg-secondary',
 };
 
 export function ConnectionsListPage() {

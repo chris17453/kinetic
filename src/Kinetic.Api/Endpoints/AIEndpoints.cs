@@ -28,13 +28,19 @@ public static class AIEndpoints
             .WithDescription("Suggest human-readable column names")
             .Produces<Dictionary<string, string>>(StatusCodes.Status200OK);
 
+        // Alias for frontend compatibility (uses suggest-column-names)
+        group.MapPost("/suggest-column-names", SuggestColumnNames)
+            .WithName("SuggestColumnNamesAlias")
+            .WithDescription("Alias for suggest-columns")
+            .Produces<Dictionary<string, string>>(StatusCodes.Status200OK);
+
         group.MapPost("/suggest-visualization", SuggestVisualization)
             .WithName("SuggestVisualization")
             .WithDescription("Suggest visualization type based on data shape")
             .Produces<VisualizationSuggestion>(StatusCodes.Status200OK);
 
         group.MapPost("/explain-query", ExplainQuery)
-            .WithName("ExplainQuery")
+            .WithName("AIExplainQuery")
             .WithDescription("Explain SQL query in plain English")
             .Produces<QueryExplanationResponse>(StatusCodes.Status200OK);
     }

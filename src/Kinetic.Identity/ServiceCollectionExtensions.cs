@@ -24,10 +24,15 @@ public static class ServiceCollectionExtensions
         configuration.GetSection("EntraId").Bind(entraSettings);
         services.AddSingleton(entraSettings);
 
+        var smtpSettings = new SmtpSettings();
+        configuration.GetSection("Smtp").Bind(smtpSettings);
+        services.AddSingleton(smtpSettings);
+
         // Services
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IGroupService, GroupService>();
@@ -41,6 +46,7 @@ public static class ServiceCollectionExtensions
         })
         .AddJwtBearer(options =>
         {
+            options.MapInboundClaims = false;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,

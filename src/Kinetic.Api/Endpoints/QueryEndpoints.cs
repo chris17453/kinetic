@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Kinetic.Api.Services;
 using Kinetic.Adapters.Core;
 using Kinetic.Core.Domain.Reports;
+using Kinetic.Core.Domain.Connections;
 using System.Text.Json;
 
 namespace Kinetic.Api.Endpoints;
@@ -26,6 +27,8 @@ public static class QueryEndpoints
         group.MapPost("/explain", ExplainQuery)
             .WithName("ExplainQuery")
             .Produces<ExplainResultDto>();
+
+        group.MapPost("/validate", ValidateQuery).WithName("ValidateQuery");
     }
 
     private static async Task<IResult> ExecuteQuery(
@@ -240,6 +243,50 @@ public static class QueryEndpoints
         }
     }
 
+    private static async Task<IResult> ValidateQuery(
+        [FromBody] ValidateQueryRequest request,
+        IConnectionService connectionService,
+        IAdapterFactory adapterFactory)
+    {
+        var errors = new List<object>();
+        var warnings = new List<object>();
+
+        if (string.IsNullOrWhiteSpace(request.Sql))
+        {
+            errors.Add(new { line = 1, column = 0, message = "Query cannot be empty" });
+            return Results.Ok(new { valid = false, errors, warnings });
+        }
+
+        try
+        {
+            var connection = await connectionService.GetConnectionByIdAsync(request.ConnectionId);
+            if (connection == null)
+            {
+                errors.Add(new { line = 1, column = 0, message = "Connection not found" });
+                return Results.Ok(new { valid = false, errors, warnings });
+            }
+
+            var connStr = connectionService.DecryptConnectionString(connection);
+            var adapter = adapterFactory.GetAdapter(connection.Type);
+
+            // Use SET FMTONLY ON to validate without returning data (SQL Server)
+            // This parses and resolves object names without executing
+            await adapter.ExecuteQueryAsync(
+                connStr,
+                $"SET FMTONLY ON;\n{request.Sql}\nSET FMTONLY OFF;",
+                null,
+                new QueryOptions { Timeout = 10 },
+                default);
+        }
+        catch (Exception ex)
+        {
+            errors.Add(new { line = 1, column = 0, message = ex.Message });
+            return Results.Ok(new { valid = false, errors, warnings });
+        }
+
+        return Results.Ok(new { valid = true, errors, warnings });
+    }
+
     private static Guid? GetUserId(HttpContext context)
     {
         var userIdClaim = context.User.FindFirst("sub")?.Value;
@@ -299,3 +346,5 @@ public record ExplainResultDto
     public required string Plan { get; init; }
     public long ExecutionTimeMs { get; init; }
 }
+
+public record ValidateQueryRequest(Guid ConnectionId, string Sql);

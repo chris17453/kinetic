@@ -189,7 +189,7 @@ public class TempCacheService : ITempCacheService
                     TableName NVARCHAR(256) PRIMARY KEY,
                     ReportId UNIQUEIDENTIFIER NOT NULL,
                     ParameterHash NVARCHAR(64) NOT NULL,
-                    RowCount INT NOT NULL,
+                    [RowCount] INT NOT NULL,
                     CachedAt DATETIME2 NOT NULL,
                     ExpiresAt DATETIME2 NOT NULL,
                     INDEX IX_ReportId (ReportId),
@@ -286,10 +286,10 @@ public class TempCacheService : ITempCacheService
             WHEN MATCHED THEN UPDATE SET 
                 ReportId = @ReportId,
                 ParameterHash = @ParameterHash,
-                RowCount = @RowCount,
+                [RowCount] = @RowCount,
                 CachedAt = @CachedAt,
                 ExpiresAt = @ExpiresAt
-            WHEN NOT MATCHED THEN INSERT (TableName, ReportId, ParameterHash, RowCount, CachedAt, ExpiresAt)
+            WHEN NOT MATCHED THEN INSERT (TableName, ReportId, ParameterHash, [RowCount], CachedAt, ExpiresAt)
                 VALUES (@TableName, @ReportId, @ParameterHash, @RowCount, @CachedAt, @ExpiresAt);";
 
         await using var cmd = new SqlCommand(sql, conn);
@@ -305,7 +305,7 @@ public class TempCacheService : ITempCacheService
     private async Task<CacheEntry?> GetCacheEntryAsync(SqlConnection conn, string tableName, CancellationToken ct)
     {
         var sql = $@"
-            SELECT ReportId, ParameterHash, RowCount, CachedAt, ExpiresAt 
+            SELECT ReportId, ParameterHash, [RowCount], CachedAt, ExpiresAt
             FROM [{_options.SchemaName}].[__CacheMetadata] 
             WHERE TableName = @TableName";
 

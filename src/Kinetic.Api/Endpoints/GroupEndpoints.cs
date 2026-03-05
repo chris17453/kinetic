@@ -34,9 +34,9 @@ public static class GroupEndpoints
     }
 
     private static async Task<IResult> GetGroups(
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
-        IGroupService groupService)
+        IGroupService groupService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
     {
         page = page <= 0 ? 1 : page;
         pageSize = pageSize <= 0 ? 25 : Math.Min(pageSize, 100);

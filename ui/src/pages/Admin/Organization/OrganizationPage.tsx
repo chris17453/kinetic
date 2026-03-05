@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from '../../../lib/api';
+import { useToast } from '../../../components/common/Toast';
+import { useBrandingStore } from '../../../stores/brandingStore';
 
 interface OrganizationBranding {
   logoUrl: string;
@@ -7,6 +10,12 @@ interface OrganizationBranding {
   faviconUrl: string;
   loginBackgroundUrl: string;
   dashboardBackgroundUrl: string;
+  useTextLogo: boolean;
+  logoText: string;
+  logoTextFont: string;
+  logoTextSize: string;
+  logoTextColor: string;
+  logoTextDarkColor: string;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
@@ -63,6 +72,12 @@ const defaultBranding: OrganizationBranding = {
   faviconUrl: '',
   loginBackgroundUrl: '',
   dashboardBackgroundUrl: '',
+  useTextLogo: false,
+  logoText: 'Kinetic',
+  logoTextFont: 'Inter, system-ui, sans-serif',
+  logoTextSize: '1.5rem',
+  logoTextColor: '#3B82F6',
+  logoTextDarkColor: '#60A5FA',
   primaryColor: '#3B82F6',
   secondaryColor: '#6366F1',
   accentColor: '#10B981',
@@ -168,21 +183,104 @@ const SettingSwitch = ({ id, label, description, checked, onChange }: SettingSwi
 export function OrganizationPage() {
   const [branding, setBranding] = useState<OrganizationBranding>(defaultBranding);
   const [settings, setSettings] = useState<OrganizationSettings>(defaultSettings);
-  const [orgName, setOrgName] = useState('My Organization');
-  const [orgSlug, setOrgSlug] = useState('my-org');
+  const [orgName, setOrgName] = useState('Kinetic');
+  const [orgSlug, setOrgSlug] = useState('default');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light');
   const [activeTab, setActiveTab] = useState('branding');
+  const toast = useToast();
+  const { fetchGlobalBranding } = useBrandingStore();
+
+  // Fetch on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [brandingRes, settingsRes] = await Promise.all([
+          api.get('/organizations/branding'),
+          api.get('/organizations/settings'),
+        ]);
+        const b = brandingRes.data;
+        setOrgName(b.orgName || 'Kinetic');
+        setOrgSlug(b.orgSlug || 'default');
+        setBranding({
+          logoUrl: b.logoUrl || '',
+          logoLightUrl: b.logoLightUrl || '',
+          logoDarkUrl: b.logoDarkUrl || '',
+          faviconUrl: b.faviconUrl || '',
+          loginBackgroundUrl: b.loginBackgroundUrl || '',
+          dashboardBackgroundUrl: b.dashboardBackgroundUrl || '',
+          useTextLogo: b.useTextLogo || false,
+          logoText: b.logoText || 'Kinetic',
+          logoTextFont: b.logoTextFont || 'Inter, system-ui, sans-serif',
+          logoTextSize: b.logoTextSize || '1.5rem',
+          logoTextColor: b.logoTextColor || '#3B82F6',
+          logoTextDarkColor: b.logoTextDarkColor || '#60A5FA',
+          primaryColor: b.primaryColor,
+          secondaryColor: b.secondaryColor,
+          accentColor: b.accentColor,
+          backgroundColor: b.backgroundColor,
+          surfaceColor: b.surfaceColor,
+          textColor: b.textColor,
+          textMutedColor: b.textMutedColor,
+          borderColor: b.borderColor,
+          errorColor: b.errorColor,
+          warningColor: b.warningColor,
+          successColor: b.successColor,
+          infoColor: b.infoColor,
+          darkPrimaryColor: b.darkPrimaryColor,
+          darkSecondaryColor: b.darkSecondaryColor,
+          darkAccentColor: b.darkAccentColor,
+          darkBackgroundColor: b.darkBackgroundColor,
+          darkSurfaceColor: b.darkSurfaceColor,
+          darkTextColor: b.darkTextColor,
+          darkTextMutedColor: b.darkTextMutedColor,
+          darkBorderColor: b.darkBorderColor,
+          fontFamily: b.fontFamily,
+          headingFontFamily: b.headingFontFamily,
+          monoFontFamily: b.monoFontFamily,
+          customCss: b.customCss || '',
+        });
+        setSettings(settingsRes.data);
+      } catch {
+        // use defaults
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // API call to save
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await Promise.all([
+        api.put('/organizations/branding', {
+          orgName,
+          orgSlug,
+          ...branding,
+        }),
+        api.put('/organizations/settings', settings),
+      ]);
+      // Refresh the global branding store so the rest of the app picks up changes
+      await fetchGlobalBranding();
+      toast.success('Settings saved', 'Branding and settings updated successfully.');
+    } catch (err: any) {
+      toast.error('Save failed', err?.response?.data?.error || err.message);
     } finally {
       setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '40vh' }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-4">
@@ -285,6 +383,102 @@ export function OrganizationPage() {
             <h5 className="card-title mb-0">Images &amp; Branding</h5>
           </div>
           <div className="card-body">
+            {/* Text Logo Toggle */}
+            <div className="card bg-light mb-4">
+              <div className="card-body">
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div>
+                    <h6 className="fw-semibold mb-1">Text Logo</h6>
+                    <p className="text-muted small mb-0">Use text instead of an image for the sidebar logo</p>
+                  </div>
+                  <div className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="useTextLogo"
+                      checked={branding.useTextLogo}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, useTextLogo: e.target.checked })}
+                    />
+                  </div>
+                </div>
+
+                {branding.useTextLogo && (
+                  <div className="row g-3">
+                    <div className="col-md-4">
+                      <label className="form-label">Logo Text</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={branding.logoText}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, logoText: e.target.value })}
+                        placeholder="Kinetic"
+                      />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label">Font Family</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={branding.logoTextFont}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, logoTextFont: e.target.value })}
+                        placeholder="Inter, system-ui, sans-serif"
+                      />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label">Font Size</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={branding.logoTextSize}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, logoTextSize: e.target.value })}
+                        placeholder="1.5rem"
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <ColorInput
+                        label="Light Mode Color"
+                        value={branding.logoTextColor}
+                        onChange={(v: string) => setBranding({ ...branding, logoTextColor: v })}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <ColorInput
+                        label="Dark Mode Color"
+                        value={branding.logoTextDarkColor}
+                        onChange={(v: string) => setBranding({ ...branding, logoTextDarkColor: v })}
+                      />
+                    </div>
+                    <div className="col-12">
+                      <label className="form-label text-muted small">Preview</label>
+                      <div className="d-flex gap-4 align-items-center">
+                        <div className="border rounded p-3" style={{ background: '#fff' }}>
+                          <span style={{
+                            fontFamily: branding.logoTextFont,
+                            fontSize: branding.logoTextSize,
+                            color: branding.logoTextColor,
+                            fontWeight: 700,
+                          }}>
+                            {branding.logoText || 'Kinetic'}
+                          </span>
+                        </div>
+                        <div className="border rounded p-3" style={{ background: '#1E293B' }}>
+                          <span style={{
+                            fontFamily: branding.logoTextFont,
+                            fontSize: branding.logoTextSize,
+                            color: branding.logoTextDarkColor,
+                            fontWeight: 700,
+                          }}>
+                            {branding.logoText || 'Kinetic'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="row g-4">
               {/* Logo Upload */}
               <div className="col-md-6">
