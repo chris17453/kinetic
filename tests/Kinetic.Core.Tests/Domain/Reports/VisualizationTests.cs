@@ -1,4 +1,5 @@
 using Kinetic.Core.Domain.Reports;
+using System.Text.Json;
 
 namespace Kinetic.Core.Tests.Domain.Reports;
 
@@ -17,6 +18,43 @@ public class VisualizationConfigTests
         Assert.True(config.Bordered);
         Assert.Contains(ExportFormat.Csv, config.ExportFormats);
         Assert.Contains(ExportFormat.Excel, config.ExportFormats);
+        Assert.Empty(config.FieldWells);
+        Assert.Equal(1, config.Layout.Page);
+        Assert.Equal(6, config.Layout.Width);
+        Assert.Equal(4, config.Layout.Height);
+    }
+
+    [Fact]
+    public void VisualizationConfig_FieldWellsAndLayout_CanRoundTripThroughJson()
+    {
+        VisualizationConfig config = new ChartVisualizationConfig
+        {
+            Id = Guid.NewGuid(),
+            Name = "Sales by Region",
+            Type = VisualizationType.Bar,
+            FieldWells = new()
+            {
+                new() { Role = "Category", Field = "region", DisplayName = "Region", DisplayOrder = 0 },
+                new() { Role = "Values", Field = "sales", DisplayName = "Sales", Aggregation = FieldAggregation.Sum, DisplayOrder = 1 }
+            },
+            Layout = new() { Page = 2, X = 3, Y = 4, Width = 8, Height = 5 },
+            Interactions = new()
+            {
+                new() { TargetVisualizationId = Guid.NewGuid(), Mode = VisualizationInteractionMode.Highlight }
+            }
+        };
+
+        var json = JsonSerializer.Serialize(config);
+        var restored = JsonSerializer.Deserialize<VisualizationConfig>(json);
+
+        Assert.IsType<ChartVisualizationConfig>(restored);
+        Assert.Equal(2, restored!.FieldWells.Count);
+        Assert.Equal("Category", restored.FieldWells[0].Role);
+        Assert.Equal(FieldAggregation.Sum, restored.FieldWells[1].Aggregation);
+        Assert.Equal(2, restored.Layout.Page);
+        Assert.Equal(8, restored.Layout.Width);
+        Assert.Single(restored.Interactions);
+        Assert.Equal(VisualizationInteractionMode.Highlight, restored.Interactions[0].Mode);
     }
 
     [Fact]

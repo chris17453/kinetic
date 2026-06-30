@@ -34,7 +34,7 @@ public static class AIEndpoints
             .Produces<VisualizationSuggestion>(StatusCodes.Status200OK);
 
         group.MapPost("/explain-query", ExplainQuery)
-            .WithName("ExplainQuery")
+            .WithName("ExplainQueryWithAI")
             .WithDescription("Explain SQL query in plain English")
             .Produces<QueryExplanationResponse>(StatusCodes.Status200OK);
     }

@@ -11,6 +11,8 @@ public class Connection : IOwnedEntity
     public string? Description { get; set; }
     public ConnectionType Type { get; set; }
     public string ConnectionString { get; set; } = string.Empty;
+    public Guid? WorkspaceId { get; set; }
+    public Workspaces.Workspace? Workspace { get; set; }
 
     // Ownership
     public OwnerType OwnerType { get; set; }

@@ -15,6 +15,7 @@ using Kinetic.Core.Services.Export;
 using Serilog;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 // Configure Serilog
@@ -30,8 +31,28 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
+    if (builder.Environment.IsEnvironment("Testing"))
+    {
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = "Server=(localdb)\\mssqllocaldb;Database=KineticTesting;Trusted_Connection=True;",
+            ["Encryption:Key"] = "test-encryption-key-32-chars-ok!",
+            ["Jwt:Secret"] = "test-jwt-secret-at-least-32-chars-long",
+            ["Jwt:Issuer"] = "kinetic-test",
+            ["Jwt:Audience"] = "kinetic-test",
+            ["Jwt:ExpiryMinutes"] = "60",
+            ["Redis:ConnectionString"] = "",
+            ["Ingest:Port"] = "0",
+        });
+    }
+
     // OpenAPI
     builder.Services.AddOpenApi();
+    builder.Services.AddHttpClient();
+    builder.Services.ConfigureHttpJsonOptions(options =>
+    {
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
     // Configure max request size for file uploads
     builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
@@ -46,11 +67,21 @@ try
     });
 
     // Database
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? throw new InvalidOperationException("DefaultConnection is required");
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString) && builder.Environment.IsEnvironment("Testing"))
+    {
+        connectionString = "Server=(localdb)\\mssqllocaldb;Database=KineticTesting;Trusted_Connection=True;";
+    }
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("DefaultConnection is required");
+    }
     
-    builder.Services.AddDbContext<KineticDbContext>(options =>
-        options.UseSqlServer(connectionString));
+    if (!builder.Environment.IsEnvironment("Testing"))
+    {
+        builder.Services.AddDbContext<KineticDbContext>(options =>
+            options.UseSqlServer(connectionString));
+    }
 
     // Identity & Auth
     builder.Services.AddKineticIdentity(builder.Configuration);
@@ -93,8 +124,15 @@ try
     builder.Services.AddScoped<IExportService, ExportService>();
 
     // Services
-    var encryptionKey = builder.Configuration["Encryption:Key"]
-        ?? throw new InvalidOperationException("Encryption:Key configuration is required. Set the Encryption__Key environment variable.");
+    var encryptionKey = builder.Configuration["Encryption:Key"];
+    if (string.IsNullOrWhiteSpace(encryptionKey) && builder.Environment.IsEnvironment("Testing"))
+    {
+        encryptionKey = "test-encryption-key-32-chars-ok!";
+    }
+    if (string.IsNullOrWhiteSpace(encryptionKey))
+    {
+        throw new InvalidOperationException("Encryption:Key configuration is required. Set the Encryption__Key environment variable.");
+    }
     builder.Services.AddScoped<IConnectionService>(sp =>
         new ConnectionService(
             sp.GetRequiredService<KineticDbContext>(),
@@ -123,6 +161,13 @@ try
             sp.GetRequiredService<IConnectionService>()));
 
     builder.Services.AddScoped<IEmbedService, EmbedService>();
+    builder.Services.AddScoped<IRefreshScheduleRunner, RefreshScheduleRunner>();
+    builder.Services.AddScoped<IRefreshJobProcessor, RefreshJobProcessor>();
+    if (!builder.Environment.IsEnvironment("Testing"))
+    {
+        builder.Services.AddHostedService<RefreshScheduleHostedService>();
+        builder.Services.AddHostedService<RefreshJobHostedService>();
+    }
 
     // CORS
     builder.Services.AddCors(options =>
@@ -143,12 +188,12 @@ try
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-        // Auth endpoints: 10 requests per minute per IP (brute-force protection)
+        // Auth endpoints: strict in production, relaxed in development for local E2E reruns.
         options.AddSlidingWindowLimiter("auth", limiterOptions =>
         {
             limiterOptions.Window = TimeSpan.FromMinutes(1);
             limiterOptions.SegmentsPerWindow = 6;
-            limiterOptions.PermitLimit = 10;
+            limiterOptions.PermitLimit = builder.Environment.IsDevelopment() ? 1_000 : 10;
             limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
             limiterOptions.QueueLimit = 0;
         });
@@ -173,7 +218,7 @@ try
             {
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 6,
-                PermitLimit = 200,
+                PermitLimit = builder.Environment.IsDevelopment() ? 2_000 : 200,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             });
@@ -189,9 +234,13 @@ try
     });
 
     // Health checks
-    builder.Services.AddHealthChecks()
-        .AddDbContextCheck<KineticDbContext>("database")
-        .AddRedis(redisConnection, name: "redis");
+    var healthChecks = builder.Services.AddHealthChecks()
+        .AddDbContextCheck<KineticDbContext>("database");
+
+    if (!string.IsNullOrWhiteSpace(redisConnection))
+    {
+        healthChecks.AddRedis(redisConnection, name: "redis");
+    }
 
     var app = builder.Build();
 
@@ -203,7 +252,10 @@ try
         app.UseHttpsRedirection();
     }
     app.UseCors();
-    app.UseRateLimiter();
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        app.UseRateLimiter();
+    }
     app.UseSerilogRequestLogging();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -229,6 +281,11 @@ try
     app.MapUserEndpoints();
     app.MapGroupEndpoints();
     app.MapDepartmentEndpoints();
+    app.MapWorkspaceEndpoints();
+    app.MapDatasetEndpoints();
+    app.MapDashboardEndpoints();
+    app.MapIntegrationEndpoints();
+    app.MapRefreshEndpoints();
     app.MapConnectionEndpoints();
     app.MapQueryEndpoints();
     app.MapReportEndpoints();
@@ -262,6 +319,7 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+    throw;
 }
 finally
 {

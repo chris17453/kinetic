@@ -11,12 +11,15 @@ public static class QueueServiceExtensions
     {
         services.AddMassTransit(x =>
         {
-            x.AddConsumer<ExecuteReportConsumer>();
-            x.AddConsumer<ScheduledReportConsumer>();
-            x.AddConsumer<TriggerScheduledReportsConsumer>();
-            x.AddConsumer<EntraGroupSyncConsumer>();
-            x.AddConsumer<AuditCleanupConsumer>();
-            x.AddConsumer<TempDataCleanupConsumer>();
+            // These consumers depend on legacy services that are not registered for
+            // the local-first API host. Keep MassTransit available for publishing
+            // without making unfinished integrations block startup.
+            // x.AddConsumer<ExecuteReportConsumer>();
+            // x.AddConsumer<ScheduledReportConsumer>();
+            // x.AddConsumer<TriggerScheduledReportsConsumer>();
+            // x.AddConsumer<EntraGroupSyncConsumer>();
+            // x.AddConsumer<AuditCleanupConsumer>();
+            // x.AddConsumer<TempDataCleanupConsumer>();
 
             x.UsingInMemory((context, cfg) =>
             {
@@ -32,8 +35,6 @@ public static class QueueServiceExtensions
             //     cfg.ConfigureEndpoints(context);
             // });
         });
-
-        services.AddHostedService<ScheduledJobsHostedService>();
 
         return services;
     }

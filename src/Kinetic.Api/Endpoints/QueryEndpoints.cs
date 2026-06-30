@@ -242,7 +242,8 @@ public static class QueryEndpoints
 
     private static Guid? GetUserId(HttpContext context)
     {
-        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        var userIdClaim = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (userIdClaim != null && Guid.TryParse(userIdClaim, out var userId))
         {
             return userId;

@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "api:types": "openapi-typescript ${KINETIC_OPENAPI_URL:-http://localhost:5000/openapi/v1.json} -o src/lib/api/generated.d.ts",
+    "api:types:check": "tmp=$(mktemp) && openapi-typescript ${KINETIC_OPENAPI_URL:-http://localhost:5000/openapi/v1.json} -o \"$tmp\" && diff -u src/lib/api/generated.d.ts \"$tmp\""
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
@@ -51,6 +53,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "jsdom": "^28.1.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",

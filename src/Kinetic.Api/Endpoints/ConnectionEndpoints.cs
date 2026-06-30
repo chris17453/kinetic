@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Kinetic.Api.Services;
+using Kinetic.Core.Domain;
 using Kinetic.Core.Domain.Connections;
+using Kinetic.Core.Domain.Workspaces;
 using Kinetic.Adapters.Core;
+using Kinetic.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Kinetic.Api.Endpoints;
 
@@ -29,34 +33,38 @@ public static class ConnectionEndpoints
     }
 
     private static async Task<IResult> GetConnections(
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         HttpContext context,
         IConnectionService connectionService)
     {
         var userId = GetUserId(context);
         if (userId == null) return Results.Unauthorized();
 
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 25 : Math.Min(pageSize, 100);
+        var requestedPage = page.GetValueOrDefault();
+        var requestedPageSize = pageSize.GetValueOrDefault();
+        var resolvedPage = requestedPage <= 0 ? 1 : requestedPage;
+        var resolvedPageSize = requestedPageSize <= 0 ? 25 : Math.Min(requestedPageSize, 100);
 
-        var connections = await connectionService.GetConnectionsAsync(userId.Value, page, pageSize);
+        var connections = await connectionService.GetConnectionsAsync(userId.Value, resolvedPage, resolvedPageSize);
         var total = await connectionService.GetConnectionCountAsync(userId.Value);
 
         return Results.Ok(new
         {
             items = connections.Select(MapConnection),
             total,
-            page,
-            pageSize,
-            totalPages = (int)Math.Ceiling(total / (double)pageSize)
+            page = resolvedPage,
+            pageSize = resolvedPageSize,
+            totalPages = (int)Math.Ceiling(total / (double)resolvedPageSize)
         });
     }
 
-    private static async Task<IResult> GetConnection(Guid id, IConnectionService connectionService)
+    private static async Task<IResult> GetConnection(Guid id, HttpContext context, IConnectionService connectionService, KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
         var connection = await connectionService.GetConnectionByIdAsync(id);
-        if (connection == null)
+        if (connection == null || !await CanViewAsync(db, connection, userId.Value, context.RequestAborted))
         {
             return Results.NotFound();
         }
@@ -67,10 +75,14 @@ public static class ConnectionEndpoints
     private static async Task<IResult> CreateConnection(
         [FromBody] CreateConnectionRequest request,
         HttpContext context,
-        IConnectionService connectionService)
+        IConnectionService connectionService,
+        KineticDbContext db)
     {
         var userId = GetUserId(context);
         if (userId == null) return Results.Unauthorized();
+        if (request.WorkspaceId.HasValue &&
+            !await HasWorkspaceRoleAsync(db, request.WorkspaceId.Value, userId.Value, WorkspaceRole.Contributor, context.RequestAborted))
+            return Results.Forbid();
 
         var connection = await connectionService.CreateConnectionAsync(request, userId.Value);
         return Results.Created($"/api/connections/{connection.Id}", MapConnection(connection));
@@ -79,8 +91,20 @@ public static class ConnectionEndpoints
     private static async Task<IResult> UpdateConnection(
         Guid id,
         [FromBody] UpdateConnectionRequest request,
-        IConnectionService connectionService)
+        HttpContext context,
+        IConnectionService connectionService,
+        KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+        var existing = await connectionService.GetConnectionByIdAsync(id);
+        if (existing == null || !await CanEditAsync(db, existing, userId.Value, context.RequestAborted))
+            return Results.NotFound();
+        if (request.WorkspaceId.HasValue &&
+            request.WorkspaceId != existing.WorkspaceId &&
+            !await HasWorkspaceRoleAsync(db, request.WorkspaceId.Value, userId.Value, WorkspaceRole.Contributor, context.RequestAborted))
+            return Results.Forbid();
+
         var connection = await connectionService.UpdateConnectionAsync(id, request);
         if (connection == null)
         {
@@ -90,14 +114,26 @@ public static class ConnectionEndpoints
         return Results.Ok(MapConnection(connection));
     }
 
-    private static async Task<IResult> DeleteConnection(Guid id, IConnectionService connectionService)
+    private static async Task<IResult> DeleteConnection(Guid id, HttpContext context, IConnectionService connectionService, KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+        var existing = await connectionService.GetConnectionByIdAsync(id);
+        if (existing == null || !await CanEditAsync(db, existing, userId.Value, context.RequestAborted))
+            return Results.NotFound();
+
         var deleted = await connectionService.DeleteConnectionAsync(id);
         return deleted ? Results.NoContent() : Results.NotFound();
     }
 
-    private static async Task<IResult> TestConnection(Guid id, IConnectionService connectionService)
+    private static async Task<IResult> TestConnection(Guid id, HttpContext context, IConnectionService connectionService, KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+        var connection = await connectionService.GetConnectionByIdAsync(id);
+        if (connection == null || !await CanEditAsync(db, connection, userId.Value, context.RequestAborted))
+            return Results.NotFound();
+
         var result = await connectionService.TestConnectionAsync(id);
         return Results.Ok(new
         {
@@ -124,8 +160,14 @@ public static class ConnectionEndpoints
         });
     }
 
-    private static async Task<IResult> GetSchema(Guid id, IConnectionService connectionService)
+    private static async Task<IResult> GetSchema(Guid id, HttpContext context, IConnectionService connectionService, KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+        var connection = await connectionService.GetConnectionByIdAsync(id);
+        if (connection == null || !await CanViewAsync(db, connection, userId.Value, context.RequestAborted))
+            return Results.NotFound();
+
         try
         {
             var schema = await connectionService.GetSchemaAsync(id);
@@ -141,8 +183,16 @@ public static class ConnectionEndpoints
         Guid id, 
         string tableName,
         [FromQuery] string? schema,
-        IConnectionService connectionService)
+        HttpContext context,
+        IConnectionService connectionService,
+        KineticDbContext db)
     {
+        var userId = GetUserId(context);
+        if (userId == null) return Results.Unauthorized();
+        var connection = await connectionService.GetConnectionByIdAsync(id);
+        if (connection == null || !await CanViewAsync(db, connection, userId.Value, context.RequestAborted))
+            return Results.NotFound();
+
         try
         {
             var columns = await connectionService.GetTableColumnsAsync(id, tableName, schema);
@@ -167,13 +217,52 @@ public static class ConnectionEndpoints
 
     private static Guid? GetUserId(HttpContext context)
     {
-        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        var userIdClaim = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (userIdClaim != null && Guid.TryParse(userIdClaim, out var userId))
         {
             return userId;
         }
         return null;
     }
+
+    private static async Task<bool> CanViewAsync(KineticDbContext db, Connection connection, Guid userId, CancellationToken ct)
+        => connection.IsActive && (connection.OwnerType == OwnerType.User && connection.OwnerId == userId ||
+           connection.Visibility == Visibility.Public ||
+           (connection.WorkspaceId.HasValue && await HasWorkspaceRoleAsync(db, connection.WorkspaceId.Value, userId, WorkspaceRole.Viewer, ct)));
+
+    private static async Task<bool> CanEditAsync(KineticDbContext db, Connection connection, Guid userId, CancellationToken ct)
+        => connection.IsActive && (connection.OwnerType == OwnerType.User && connection.OwnerId == userId ||
+           (connection.WorkspaceId.HasValue && await HasWorkspaceRoleAsync(db, connection.WorkspaceId.Value, userId, WorkspaceRole.Contributor, ct)));
+
+    private static async Task<bool> HasWorkspaceRoleAsync(
+        KineticDbContext db,
+        Guid workspaceId,
+        Guid userId,
+        WorkspaceRole minimumRole,
+        CancellationToken ct)
+    {
+        var workspace = await db.Workspaces
+            .Where(w => w.Id == workspaceId && w.IsActive)
+            .Select(w => new { w.OwnerType, w.OwnerId })
+            .FirstOrDefaultAsync(ct);
+        if (workspace == null) return false;
+        if (workspace.OwnerType == OwnerType.User && workspace.OwnerId == userId) return true;
+
+        var role = await db.WorkspaceMembers
+            .Where(m => m.WorkspaceId == workspaceId && m.UserId == userId && m.IsActive)
+            .Select(m => (WorkspaceRole?)m.Role)
+            .FirstOrDefaultAsync(ct);
+        return role.HasValue && RoleRank(role.Value) >= RoleRank(minimumRole);
+    }
+
+    private static int RoleRank(WorkspaceRole role) => role switch
+    {
+        WorkspaceRole.Admin => 4,
+        WorkspaceRole.Member => 3,
+        WorkspaceRole.Contributor => 2,
+        _ => 1
+    };
 
     private static object MapConnection(Connection connection)
     {
@@ -183,6 +272,14 @@ public static class ConnectionEndpoints
             name = connection.Name,
             description = connection.Description,
             type = connection.Type.ToString(),
+            workspaceId = connection.WorkspaceId,
+            workspaceName = connection.Workspace?.Name,
+            workspace = connection.Workspace == null ? null : new
+            {
+                id = connection.Workspace.Id,
+                name = connection.Workspace.Name,
+                slug = connection.Workspace.Slug
+            },
             ownerType = connection.OwnerType.ToString(),
             ownerId = connection.OwnerId,
             visibility = connection.Visibility.ToString(),

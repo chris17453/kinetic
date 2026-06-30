@@ -26,6 +26,34 @@ public abstract class VisualizationConfig
     public bool ShowLegend { get; set; }
     public string? ColorScheme { get; set; }
     public int DisplayOrder { get; set; }
+    public List<VisualizationFieldWell> FieldWells { get; set; } = new();
+    public VisualizationLayout Layout { get; set; } = new();
+    public List<VisualizationInteraction> Interactions { get; set; } = new();
+}
+
+public class VisualizationFieldWell
+{
+    public string Role { get; set; } = string.Empty;
+    public string Field { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public FieldAggregation Aggregation { get; set; } = FieldAggregation.None;
+    public int DisplayOrder { get; set; }
+}
+
+public class VisualizationLayout
+{
+    public int Page { get; set; } = 1;
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Width { get; set; } = 6;
+    public int Height { get; set; } = 4;
+    public bool IsHidden { get; set; }
+}
+
+public class VisualizationInteraction
+{
+    public Guid TargetVisualizationId { get; set; }
+    public VisualizationInteractionMode Mode { get; set; } = VisualizationInteractionMode.Filter;
 }
 
 public class TableVisualizationConfig : VisualizationConfig
@@ -229,4 +257,22 @@ public enum ExportFormat
     Excel,
     Pdf,
     Json
+}
+
+public enum FieldAggregation
+{
+    None,
+    Sum,
+    Average,
+    Min,
+    Max,
+    Count,
+    CountDistinct
+}
+
+public enum VisualizationInteractionMode
+{
+    None,
+    Filter,
+    Highlight
 }

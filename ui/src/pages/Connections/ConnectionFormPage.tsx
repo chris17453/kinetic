@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
-import type { ConnectionType, Visibility } from '../../lib/api/types';
+import type { ConnectionType, Visibility, Workspace } from '../../lib/api/types';
 import { Breadcrumb } from '../../components/common';
 
 const connectionTypes: { value: ConnectionType; label: string }[] = [
@@ -32,6 +32,7 @@ const connectionFormSchema = z.object({
   description: z.string(),
   type: z.enum(['SqlServer', 'PostgreSQL', 'MySQL', 'SQLite', 'Oracle', 'DuckDB', 'ClickHouse', 'Snowflake', 'BigQuery', 'Custom']),
   connectionString: z.string(),
+  workspaceId: z.string(),
   visibility: z.enum(['Private', 'Group', 'Department', 'Public']),
 });
 
@@ -40,12 +41,14 @@ type ConnectionFormValues = {
   description: string;
   type: ConnectionType;
   connectionString: string;
+  workspaceId: string;
   visibility: Visibility;
 };
 
 export function ConnectionFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const isEditing = !!id;
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -64,12 +67,21 @@ export function ConnectionFormPage() {
       description: '',
       type: 'SqlServer',
       connectionString: '',
+      workspaceId: searchParams.get('workspaceId') ?? '',
       visibility: 'Private',
     },
   });
 
   const watchedType = watch('type');
   const watchedConnectionString = watch('connectionString');
+
+  const { data: workspaces } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const res = await api.get<{ items: Workspace[] }>('/workspaces');
+      return res.data.items;
+    },
+  });
 
   useQuery({
     queryKey: ['connections', id],
@@ -79,6 +91,7 @@ export function ConnectionFormPage() {
       setValue('description', res.data.description || '');
       setValue('type', res.data.type);
       setValue('connectionString', '');
+      setValue('workspaceId', res.data.workspaceId || '');
       setValue('visibility', res.data.visibility);
       return res.data;
     },
@@ -87,10 +100,14 @@ export function ConnectionFormPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: ConnectionFormValues) => {
+      const payload = {
+        ...data,
+        workspaceId: data.workspaceId || undefined,
+      };
       if (isEditing) {
-        return api.put(`/connections/${id}`, data);
+        return api.put(`/connections/${id}`, payload);
       }
-      return api.post('/connections', data);
+      return api.post('/connections', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['connections'] });
@@ -224,9 +241,26 @@ export function ConnectionFormPage() {
 
             <div className="card border-0 shadow-sm mb-3">
               <div className="card-header bg-white py-2 border-bottom">
-                <span className="small fw-semibold text-muted text-uppercase">Sharing</span>
+                <span className="small fw-semibold text-muted text-uppercase">Workspace and Sharing</span>
               </div>
               <div className="card-body">
+                <div className="mb-3">
+                  <label htmlFor="workspaceId" className="form-label fw-medium">Workspace</label>
+                  <select
+                    id="workspaceId"
+                    className="form-select"
+                    {...register('workspaceId')}
+                  >
+                    <option value="">No workspace</option>
+                    {workspaces?.map(workspace => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {workspace.name}{workspace.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">Use workspaces to group related BI assets.</div>
+                </div>
+
                 <div className="mb-0">
                   <label htmlFor="visibility" className="form-label fw-medium">Visibility</label>
                   <select

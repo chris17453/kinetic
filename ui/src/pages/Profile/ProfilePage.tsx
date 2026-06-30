@@ -21,6 +21,52 @@ const timezones = [
 ];
 
 type TabId = 'profile' | 'security' | 'preferences' | 'groups';
+type ThemeChoice = 'system' | 'light' | 'dark';
+
+interface UserSession {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  isRevoked: boolean;
+  isExpired: boolean;
+  isActive: boolean;
+}
+
+interface ApiToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: string[];
+  createdAt: string;
+  expiresAt?: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
+  isRevoked: boolean;
+  isExpired: boolean;
+  isActive: boolean;
+}
+
+interface ConnectedAccount {
+  id: string;
+  provider: string;
+  displayName: string;
+  externalId: string;
+  tenantId?: string;
+  email?: string;
+  createdAt: string;
+  lastVerifiedAt?: string;
+  revokedAt?: string;
+  isActive: boolean;
+}
+
+type ConnectedAccountProvider =
+  | 'MicrosoftEntraId'
+  | 'AzureDevOps'
+  | 'Azure'
+  | 'OpenIdConnect'
+  | 'Saml'
+  | 'ServicePrincipal'
+  | 'Custom';
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'profile',     label: 'Profile',     icon: 'fa-user' },
@@ -35,6 +81,22 @@ const ROLE_BADGE: Record<string, string> = {
   Member:  'bg-secondary',
 };
 
+const CONNECTED_ACCOUNT_PROVIDERS: { value: ConnectedAccountProvider; label: string; icon: string }[] = [
+  { value: 'MicrosoftEntraId', label: 'Microsoft Entra ID', icon: 'fa-building-columns' },
+  { value: 'AzureDevOps', label: 'Azure DevOps', icon: 'fa-code-branch' },
+  { value: 'Azure', label: 'Azure', icon: 'fa-cloud' },
+  { value: 'OpenIdConnect', label: 'OpenID Connect', icon: 'fa-id-card' },
+  { value: 'Saml', label: 'SAML', icon: 'fa-key' },
+  { value: 'ServicePrincipal', label: 'Service principal', icon: 'fa-robot' },
+  { value: 'Custom', label: 'Custom', icon: 'fa-link' },
+];
+
+const providerLabel = (provider: string) =>
+  CONNECTED_ACCOUNT_PROVIDERS.find(p => p.value === provider)?.label ?? provider;
+
+const providerIcon = (provider: string) =>
+  CONNECTED_ACCOUNT_PROVIDERS.find(p => p.value === provider)?.icon ?? 'fa-link';
+
 export function ProfilePage() {
   const { user } = useAuthStore();
   const toast = useToast();
@@ -47,7 +109,7 @@ export function ProfilePage() {
     email:       user?.email ?? '',
     department:  '',
     timezone:    'UTC',
-    themeMode:   'system' as 'system' | 'light' | 'dark',
+    themeMode:   'system' as ThemeChoice,
     notifyEmail:   true,
     notifyInApp:   true,
     notifyDigest:  false,
@@ -55,6 +117,15 @@ export function ProfilePage() {
 
   const [passwords, setPasswords] = useState({ current: '', newPwd: '', confirm: '' });
   const [pwError, setPwError] = useState('');
+  const [apiTokenName, setApiTokenName] = useState('');
+  const [createdApiToken, setCreatedApiToken] = useState('');
+  const [connectedAccountForm, setConnectedAccountForm] = useState({
+    provider: 'MicrosoftEntraId' as ConnectedAccountProvider,
+    displayName: '',
+    externalId: '',
+    tenantId: '',
+    email: user?.email ?? '',
+  });
 
   /* ------------------------------------------------------------------ */
   /* Queries & mutations                                                  */
@@ -63,14 +134,22 @@ export function ProfilePage() {
   useQuery({
     queryKey: ['me'],
     queryFn: () => api.get('/users/me').then(r => {
+      const profile = r.data;
+      const preferences = profile.preferences ?? {};
+      const themeMode = String(profile.themeMode ?? 'System').toLowerCase() as ThemeChoice;
       setForm(f => ({
         ...f,
-        displayName: r.data.displayName ?? f.displayName,
-        email:       r.data.email       ?? f.email,
-        department:  r.data.department?.name ?? '',
-        timezone:    r.data.timezone    ?? 'UTC',
+        displayName: profile.displayName ?? f.displayName,
+        email:       profile.email       ?? f.email,
+        department:  profile.department?.name ?? '',
+        timezone:    profile.timezone    ?? 'UTC',
+        themeMode:   ['system', 'light', 'dark'].includes(themeMode) ? themeMode : 'system',
+        notifyEmail:  preferences.notifyEmail ?? true,
+        notifyInApp:  preferences.notifyInApp ?? true,
+        notifyDigest: preferences.notifyDigest ?? false,
       }));
-      return r.data;
+      useAuthStore.setState({ user: profile });
+      return profile;
     }),
   });
 
@@ -80,9 +159,28 @@ export function ProfilePage() {
     enabled: activeTab === 'groups',
   });
 
+  const { data: sessionsData } = useQuery({
+    queryKey: ['me', 'sessions'],
+    queryFn: () => api.get('/users/me/sessions').then(r => r.data as { items: UserSession[]; total: number }),
+    enabled: activeTab === 'security',
+  });
+
+  const { data: apiTokensData } = useQuery({
+    queryKey: ['me', 'api-tokens'],
+    queryFn: () => api.get('/users/me/api-tokens').then(r => r.data as { items: ApiToken[]; total: number }),
+    enabled: activeTab === 'security',
+  });
+
+  const { data: connectedAccountsData } = useQuery({
+    queryKey: ['me', 'connected-accounts'],
+    queryFn: () => api.get('/users/me/connected-accounts').then(r => r.data as { items: ConnectedAccount[]; total: number }),
+    enabled: activeTab === 'security',
+  });
+
   const updateMutation = useMutation({
     mutationFn: (data: typeof form) => api.put('/users/me', data),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      useAuthStore.setState({ user: response.data });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       toast.success('Profile updated', 'Your changes have been saved.');
     },
@@ -98,6 +196,76 @@ export function ProfilePage() {
       toast.success('Password updated', 'Your password has been changed successfully.');
     },
     onError: (e: Error) => setPwError(e.message),
+  });
+
+  const revokeSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => api.delete(`/users/me/sessions/${sessionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me', 'sessions'] });
+      toast.success('Session revoked', 'The selected session can no longer refresh access.');
+    },
+    onError: (e: Error) => toast.error('Revoke failed', e.message),
+  });
+
+  const createApiTokenMutation = useMutation({
+    mutationFn: (name: string) => api.post('/users/me/api-tokens', { name, scopes: ['reports:read'] }),
+    onSuccess: (response) => {
+      setCreatedApiToken(response.data.token);
+      setApiTokenName('');
+      queryClient.invalidateQueries({ queryKey: ['me', 'api-tokens'] });
+      toast.success('API token created', 'Store the token now; it will not be shown again.');
+    },
+    onError: (e: Error) => toast.error('Token creation failed', e.message),
+  });
+
+  const revokeApiTokenMutation = useMutation({
+    mutationFn: (tokenId: string) => api.delete(`/users/me/api-tokens/${tokenId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me', 'api-tokens'] });
+      toast.success('API token revoked', 'The selected token can no longer be used.');
+    },
+    onError: (e: Error) => toast.error('Revoke failed', e.message),
+  });
+
+  const linkConnectedAccountMutation = useMutation({
+    mutationFn: (data: typeof connectedAccountForm) => api.post('/users/me/connected-accounts', {
+      provider: data.provider,
+      displayName: data.displayName,
+      externalId: data.externalId,
+      tenantId: data.tenantId || undefined,
+      email: data.email || undefined,
+      metadata: {},
+    }),
+    onSuccess: () => {
+      setConnectedAccountForm(f => ({
+        ...f,
+        displayName: '',
+        externalId: '',
+        tenantId: '',
+        email: user?.email ?? '',
+      }));
+      queryClient.invalidateQueries({ queryKey: ['me', 'connected-accounts'] });
+      toast.success('Account linked', 'The connected account has been added.');
+    },
+    onError: (e: Error) => toast.error('Link failed', e.message),
+  });
+
+  const verifyConnectedAccountMutation = useMutation({
+    mutationFn: (accountId: string) => api.post(`/users/me/connected-accounts/${accountId}/verify`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me', 'connected-accounts'] });
+      toast.success('Account verified', 'The connected account timestamp was refreshed.');
+    },
+    onError: (e: Error) => toast.error('Verify failed', e.message),
+  });
+
+  const revokeConnectedAccountMutation = useMutation({
+    mutationFn: (accountId: string) => api.delete(`/users/me/connected-accounts/${accountId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me', 'connected-accounts'] });
+      toast.success('Account revoked', 'The connected account has been disabled.');
+    },
+    onError: (e: Error) => toast.error('Revoke failed', e.message),
   });
 
   /* ------------------------------------------------------------------ */
@@ -118,7 +286,7 @@ export function ProfilePage() {
     passwordMutation.mutate({ currentPassword: passwords.current, newPassword: passwords.newPwd });
   };
 
-  const handleThemeMode = (mode: 'system' | 'light' | 'dark') => {
+  const handleThemeMode = (mode: ThemeChoice) => {
     setForm(f => ({ ...f, themeMode: mode }));
     if (mode !== 'system') {
       document.documentElement.setAttribute('data-bs-theme', mode);
@@ -140,6 +308,9 @@ export function ProfilePage() {
     .slice(0, 2);
 
   const groups: UserGroup[] = groupsData ?? user?.groups ?? [];
+  const sessions = sessionsData?.items ?? [];
+  const apiTokens = apiTokensData?.items ?? [];
+  const connectedAccounts = connectedAccountsData?.items ?? [];
 
   /* ------------------------------------------------------------------ */
   /* Render                                                               */
@@ -303,7 +474,7 @@ export function ProfilePage() {
       {/* Security tab                                                      */}
       {/* ---------------------------------------------------------------- */}
       {activeTab === 'security' && (
-        <div className="card border-0 shadow-sm" style={{ maxWidth: 500 }}>
+        <div className="card border-0 shadow-sm" style={{ maxWidth: 960 }}>
           <div className="card-header bg-white border-bottom">
             <h6 className="fw-bold mb-0">
               <i className="fa-solid fa-shield-halved me-2 text-primary"></i>
@@ -312,7 +483,7 @@ export function ProfilePage() {
           </div>
           <div className="card-body p-4">
             {user?.provider === 'Entra' ? (
-              <div className="alert alert-info d-flex align-items-start gap-2">
+              <div className="alert alert-info d-flex align-items-start gap-2 mb-4">
                 <i className="fa-solid fa-circle-info mt-1"></i>
                 <div>
                   <strong>Managed externally</strong>
@@ -409,23 +580,289 @@ export function ProfilePage() {
                         Update password
                       </>
                     )}
-                  </button>
-                </form>
-
-                {/* 2FA placeholder */}
-                <hr className="my-4" />
-                <h6 className="fw-semibold mb-2">Two-factor authentication</h6>
-                <p className="text-muted small mb-3">
-                  Add an extra layer of security to your account by enabling two-factor
-                  authentication.
-                </p>
-                <button className="btn btn-outline-secondary" disabled>
-                  <i className="fa-solid fa-mobile-screen-button me-2"></i>
-                  Set up 2FA
-                  <span className="badge bg-secondary ms-2">Coming soon</span>
-                </button>
+	                  </button>
+	                </form>
               </>
             )}
+
+            <hr className="my-4" />
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h6 className="fw-semibold mb-0">Connected accounts</h6>
+              <span className="badge bg-light text-dark border">
+                {connectedAccounts.filter(a => a.isActive).length} active
+              </span>
+            </div>
+
+            <div className="row g-2 mb-3">
+              <div className="col-md-3">
+                <select
+                  className="form-select"
+                  value={connectedAccountForm.provider}
+                  onChange={e => setConnectedAccountForm(f => ({
+                    ...f,
+                    provider: e.target.value as ConnectedAccountProvider,
+                  }))}
+                  aria-label="Connected account provider"
+                >
+                  {CONNECTED_ACCOUNT_PROVIDERS.map(provider => (
+                    <option key={provider.value} value={provider.value}>{provider.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <input
+                  className="form-control"
+                  value={connectedAccountForm.displayName}
+                  onChange={e => setConnectedAccountForm(f => ({ ...f, displayName: e.target.value }))}
+                  placeholder="Display name"
+                />
+              </div>
+              <div className="col-md-3">
+                <input
+                  className="form-control"
+                  value={connectedAccountForm.externalId}
+                  onChange={e => setConnectedAccountForm(f => ({ ...f, externalId: e.target.value }))}
+                  placeholder="External ID"
+                />
+              </div>
+              <div className="col-md-3">
+                <input
+                  className="form-control"
+                  value={connectedAccountForm.tenantId}
+                  onChange={e => setConnectedAccountForm(f => ({ ...f, tenantId: e.target.value }))}
+                  placeholder="Tenant or org"
+                />
+              </div>
+              <div className="col-md-9">
+                <input
+                  className="form-control"
+                  value={connectedAccountForm.email}
+                  onChange={e => setConnectedAccountForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="Account email"
+                />
+              </div>
+              <div className="col-md-3 d-grid">
+                <button
+                  type="button"
+                  className="btn btn-outline-primary"
+                  disabled={
+                    linkConnectedAccountMutation.isPending ||
+                    !connectedAccountForm.displayName.trim() ||
+                    !connectedAccountForm.externalId.trim()
+                  }
+                  onClick={() => linkConnectedAccountMutation.mutate(connectedAccountForm)}
+                >
+                  <i className="fa-solid fa-link me-1"></i>
+                  Link
+                </button>
+              </div>
+            </div>
+
+            {connectedAccounts.length === 0 ? (
+              <p className="text-muted small mb-0">No connected accounts have been linked.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Provider</th>
+                      <th>Account</th>
+                      <th>Verified</th>
+                      <th>Status</th>
+                      <th className="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {connectedAccounts.map(account => (
+                      <tr key={account.id}>
+                        <td>
+                          <i className={`fa-solid ${providerIcon(account.provider)} me-2 text-muted`}></i>
+                          {providerLabel(account.provider)}
+                        </td>
+                        <td>
+                          <div className="fw-medium small">{account.displayName}</div>
+                          <div className="text-muted small text-break">
+                            {account.email || account.externalId}
+                            {account.tenantId && <span> - {account.tenantId}</span>}
+                          </div>
+                        </td>
+                        <td className="small">
+                          {account.lastVerifiedAt
+                            ? new Date(account.lastVerifiedAt).toLocaleDateString()
+                            : 'Never'}
+                        </td>
+                        <td>
+                          <span className={`badge ${account.isActive ? 'bg-success' : 'bg-secondary'}`}>
+                            {account.isActive ? 'Active' : 'Revoked'}
+                          </span>
+                        </td>
+                        <td className="text-end">
+                          <div className="btn-group btn-group-sm">
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              disabled={!account.isActive || verifyConnectedAccountMutation.isPending}
+                              onClick={() => verifyConnectedAccountMutation.mutate(account.id)}
+                              title="Verify connected account"
+                            >
+                              <i className="fa-solid fa-rotate"></i>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-outline-danger"
+                              disabled={!account.isActive || revokeConnectedAccountMutation.isPending}
+                              onClick={() => revokeConnectedAccountMutation.mutate(account.id)}
+                              title="Revoke connected account"
+                            >
+                              <i className="fa-solid fa-ban"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <hr className="my-4" />
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h6 className="fw-semibold mb-0">Active sessions</h6>
+              <span className="badge bg-light text-dark border">
+                {sessions.filter(s => s.isActive).length} active
+              </span>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="text-muted small mb-0">No refresh sessions have been recorded.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Created</th>
+                      <th>Expires</th>
+                      <th>Status</th>
+                      <th className="text-end">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map(session => (
+                      <tr key={session.id}>
+                        <td className="small">{new Date(session.createdAt).toLocaleString()}</td>
+                        <td className="small">{new Date(session.expiresAt).toLocaleString()}</td>
+                        <td>
+                          <span className={`badge ${session.isActive ? 'bg-success' : 'bg-secondary'}`}>
+                            {session.isActive ? 'Active' : session.isRevoked ? 'Revoked' : 'Expired'}
+                          </span>
+                        </td>
+                        <td className="text-end">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            disabled={!session.isActive || revokeSessionMutation.isPending}
+                            onClick={() => revokeSessionMutation.mutate(session.id)}
+                            title="Revoke session"
+                          >
+                            <i className="fa-solid fa-ban"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <hr className="my-4" />
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h6 className="fw-semibold mb-0">API tokens</h6>
+              <span className="badge bg-light text-dark border">
+                {apiTokens.filter(t => t.isActive).length} active
+              </span>
+            </div>
+            {createdApiToken && (
+              <div className="alert alert-warning">
+                <div className="fw-semibold mb-2">Copy this token now</div>
+                <code className="d-block text-break">{createdApiToken}</code>
+              </div>
+            )}
+            <div className="input-group mb-3">
+              <span className="input-group-text bg-white">
+                <i className="fa-solid fa-code text-muted"></i>
+              </span>
+              <input
+                className="form-control"
+                value={apiTokenName}
+                onChange={e => setApiTokenName(e.target.value)}
+                placeholder="Token name"
+              />
+              <button
+                type="button"
+                className="btn btn-outline-primary"
+                disabled={!apiTokenName.trim() || createApiTokenMutation.isPending}
+                onClick={() => createApiTokenMutation.mutate(apiTokenName.trim())}
+              >
+                <i className="fa-solid fa-plus me-1"></i>
+                Create
+              </button>
+            </div>
+            {apiTokens.length === 0 ? (
+              <p className="text-muted small mb-0">No API tokens have been created.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Prefix</th>
+                      <th>Status</th>
+                      <th className="text-end">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apiTokens.map(token => (
+                      <tr key={token.id}>
+                        <td>
+                          <div className="fw-medium small">{token.name}</div>
+                          <div className="text-muted small">
+                            Created {new Date(token.createdAt).toLocaleDateString()}
+                          </div>
+                        </td>
+                        <td><code>{token.tokenPrefix}...</code></td>
+                        <td>
+                          <span className={`badge ${token.isActive ? 'bg-success' : 'bg-secondary'}`}>
+                            {token.isActive ? 'Active' : token.isRevoked ? 'Revoked' : 'Expired'}
+                          </span>
+                        </td>
+                        <td className="text-end">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            disabled={!token.isActive || revokeApiTokenMutation.isPending}
+                            onClick={() => revokeApiTokenMutation.mutate(token.id)}
+                            title="Revoke API token"
+                          >
+                            <i className="fa-solid fa-ban"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <hr className="my-4" />
+            <h6 className="fw-semibold mb-2">Two-factor authentication</h6>
+            <p className="text-muted small mb-3">
+              Add an extra layer of security to your account by enabling two-factor
+              authentication.
+            </p>
+            <button className="btn btn-outline-secondary" disabled>
+              <i className="fa-solid fa-mobile-screen-button me-2"></i>
+              Set up 2FA
+              <span className="badge bg-secondary ms-2">Coming soon</span>
+            </button>
           </div>
         </div>
       )}

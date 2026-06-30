@@ -11,6 +11,7 @@ interface AuthState {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithEntra: () => void;
+  completeExternalLogin: (token: string, refreshToken?: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -45,8 +46,25 @@ export const useAuthStore = create<AuthState>()(
         window.location.href = entraUrl;
       },
 
+      completeExternalLogin: async (token: string, refreshToken?: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          localStorage.setItem('kinetic_token', token);
+          if (refreshToken) localStorage.setItem('kinetic_refresh_token', refreshToken);
+          const response = await api.get('/auth/me');
+          set({ user: response.data, token, isAuthenticated: true, isLoading: false });
+        } catch (err: unknown) {
+          localStorage.removeItem('kinetic_token');
+          localStorage.removeItem('kinetic_refresh_token');
+          const message = err instanceof Error ? err.message : 'External login failed';
+          set({ error: message, user: null, token: null, isAuthenticated: false, isLoading: false });
+          throw err;
+        }
+      },
+
       logout: () => {
         localStorage.removeItem('kinetic_token');
+        localStorage.removeItem('kinetic_refresh_token');
         set({ user: null, token: null, isAuthenticated: false });
       },
 

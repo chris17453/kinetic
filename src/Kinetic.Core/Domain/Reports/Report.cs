@@ -18,11 +18,15 @@ public class Report : IOwnedEntity
     public List<EntityShare> Shares { get; set; } = new();
 
     // Categorization
+    public Guid? WorkspaceId { get; set; }
+    public Workspaces.Workspace? Workspace { get; set; }
     public Guid? CategoryId { get; set; }
     public Category? Category { get; set; }
     public List<string> Tags { get; set; } = new();
 
     // Source
+    public Guid? DatasetId { get; set; }
+    public Datasets.Dataset? Dataset { get; set; }
     public Guid ConnectionId { get; set; }
     public Connections.Connection? Connection { get; set; }
     public string QueryText { get; set; } = string.Empty;

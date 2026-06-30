@@ -38,8 +38,9 @@ public class KineticWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<KineticDbContext>>();
             services.RemoveAll<KineticDbContext>();
 
+            var databaseName = $"KineticTest_{Guid.NewGuid()}";
             services.AddDbContext<KineticDbContext>(options =>
-                options.UseInMemoryDatabase($"KineticTest_{Guid.NewGuid()}"));
+                options.UseInMemoryDatabase(databaseName));
 
             // Replace TempCacheService with a no-op stub (avoids SQL Server dependency at startup)
             services.RemoveAll<ITempCacheService>();

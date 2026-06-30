@@ -124,7 +124,7 @@ public class ExportService : IExportService
                 var col = worksheet.Column(i + 1);
                 col.AutoFit();
                 if (col.Width > 50) col.Width = 50;
-                if (columns[i].Width.HasValue) col.Width = columns[i].Width.Value;
+                if (columns[i].Width is { } width) col.Width = width;
             }
 
             // Freeze header row

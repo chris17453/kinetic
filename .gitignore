@@ -58,5 +58,10 @@ coverage/
 *.coverage
 *.coveragexml
 
+# Playwright
+playwright-report/
+test-results/
+test-results.json
+
 # NuGet
 *.nupkg

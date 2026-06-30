@@ -103,9 +103,10 @@ export function ConnectionsListPage() {
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
                 <tr>
-                  <th className="ps-4">Connection</th>
-                  <th>Type</th>
-                  <th>Visibility</th>
+	                  <th className="ps-4">Connection</th>
+	                  <th>Type</th>
+	                  <th>Workspace</th>
+	                  <th>Visibility</th>
                   <th>Status</th>
                   <th className="text-end pe-4">Actions</th>
                 </tr>
@@ -126,10 +127,20 @@ export function ConnectionsListPage() {
                           </div>
                         </div>
                       </td>
-                      <td>
-                        <span className={`badge ${typeBadge[conn.type] || 'bg-secondary'} bg-opacity-75`}>{conn.type}</span>
-                      </td>
-                      <td>
+	                      <td>
+	                        <span className={`badge ${typeBadge[conn.type] || 'bg-secondary'} bg-opacity-75`}>{conn.type}</span>
+	                      </td>
+	                      <td>
+	                        {conn.workspaceName || conn.workspace?.name ? (
+	                          <span className="badge bg-light text-dark border">
+	                            <i className="fa-solid fa-briefcase me-1"></i>
+	                            {conn.workspaceName || conn.workspace?.name}
+	                          </span>
+	                        ) : (
+	                          <span className="text-muted small">None</span>
+	                        )}
+	                      </td>
+	                      <td>
                         <span className="badge bg-light text-dark border">
                           <i className={`fa-solid ${conn.visibility === 'Private' ? 'fa-lock' : 'fa-users'} me-1`}></i>
                           {conn.visibility}

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Kinetic.Core.Domain.Identity;
 using Kinetic.Data;
 using Kinetic.Identity.Configuration;
+using System.Text.Json;
 
 namespace Kinetic.Identity.Services;
 
@@ -10,6 +11,7 @@ public interface IAuthService
     Task<AuthResult> RegisterAsync(RegisterRequest request);
     Task<AuthResult> LoginAsync(LoginRequest request);
     Task<AuthResult> RefreshTokenAsync(string refreshToken);
+    Task<AuthResult> ExternalLoginAsync(ExternalLoginRequest request);
     Task<bool> RevokeRefreshTokenAsync(Guid userId);
     Task<User?> GetUserByIdAsync(Guid userId);
     Task<User?> GetUserByEmailAsync(string email);
@@ -142,6 +144,75 @@ public class AuthService : IAuthService
         return AuthResult.Success(stored.User, accessToken, newRefreshToken);
     }
 
+    public async Task<AuthResult> ExternalLoginAsync(ExternalLoginRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email))
+            return AuthResult.Failure("External identity did not provide an email address");
+        if (string.IsNullOrWhiteSpace(request.ExternalId))
+            return AuthResult.Failure("External identity did not provide a stable subject");
+
+        var provider = request.Provider;
+        var user = await _db.Users
+            .Include(u => u.UserGroups)
+            .ThenInclude(ug => ug.Group)
+            .Include(u => u.Department)
+            .FirstOrDefaultAsync(u =>
+                (u.Provider == provider && u.ExternalId == request.ExternalId) ||
+                u.Email == email);
+
+        if (user == null)
+        {
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? email : request.DisplayName.Trim(),
+                FirstName = string.IsNullOrWhiteSpace(request.FirstName) ? null : request.FirstName.Trim(),
+                LastName = string.IsNullOrWhiteSpace(request.LastName) ? null : request.LastName.Trim(),
+                Provider = provider,
+                ExternalId = request.ExternalId,
+                PasswordHash = null,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true
+            };
+            _db.Users.Add(user);
+        }
+        else if (user.Provider != provider && user.Provider != AuthProvider.Local)
+        {
+            return AuthResult.Failure($"Please sign in with {user.Provider}");
+        }
+        else
+        {
+            if (user.Provider == AuthProvider.Local && string.IsNullOrWhiteSpace(user.ExternalId))
+                user.Provider = provider;
+            user.ExternalId = request.ExternalId;
+            user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? user.DisplayName : request.DisplayName.Trim();
+            user.FirstName = string.IsNullOrWhiteSpace(request.FirstName) ? user.FirstName : request.FirstName.Trim();
+            user.LastName = string.IsNullOrWhiteSpace(request.LastName) ? user.LastName : request.LastName.Trim();
+            user.UpdatedAt = DateTime.UtcNow;
+        }
+
+        if (!user.IsActive)
+            return AuthResult.Failure("Account is disabled");
+
+        user.LastLoginAt = DateTime.UtcNow;
+
+        await UpsertConnectedAccountAsync(user, request);
+        await SyncExternalGroupsAsync(user, request.GroupExternalIds);
+        await _db.SaveChangesAsync();
+
+        await _db.Entry(user).Collection(u => u.UserGroups).Query().Include(ug => ug.Group).LoadAsync();
+        if (user.DepartmentId.HasValue)
+            await _db.Entry(user).Reference(u => u.Department).LoadAsync();
+
+        var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
+        var accessToken = _tokenService.GenerateAccessToken(user, permissions);
+        var refreshToken = await CreateRefreshTokenAsync(user.Id);
+
+        return AuthResult.Success(user, accessToken, refreshToken);
+    }
+
     public async Task<bool> RevokeRefreshTokenAsync(Guid userId)
     {
         var tokens = await _db.RefreshTokens
@@ -191,11 +262,85 @@ public class AuthService : IAuthService
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Email == email.ToLowerInvariant());
     }
+
+    private async Task UpsertConnectedAccountAsync(User user, ExternalLoginRequest request)
+    {
+        var accountProvider = request.Provider == AuthProvider.Entra
+            ? ConnectedAccountProvider.MicrosoftEntraId
+            : ConnectedAccountProvider.OpenIdConnect;
+        var account = await _db.UserConnectedAccounts.FirstOrDefaultAsync(a =>
+            a.UserId == user.Id &&
+            a.Provider == accountProvider &&
+            a.ExternalId == request.ExternalId &&
+            !a.RevokedAt.HasValue);
+
+        if (account == null)
+        {
+            _db.UserConnectedAccounts.Add(new UserConnectedAccount
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Provider = accountProvider,
+                DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? user.DisplayName : request.DisplayName.Trim(),
+                ExternalId = request.ExternalId,
+                TenantId = string.IsNullOrWhiteSpace(request.TenantId) ? null : request.TenantId,
+                Email = user.Email,
+                MetadataJson = JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, object?>()),
+                CreatedAt = DateTime.UtcNow,
+                LastVerifiedAt = DateTime.UtcNow
+            });
+            return;
+        }
+
+        account.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? account.DisplayName : request.DisplayName.Trim();
+        account.TenantId = string.IsNullOrWhiteSpace(request.TenantId) ? account.TenantId : request.TenantId;
+        account.Email = user.Email;
+        account.MetadataJson = JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, object?>());
+        account.LastVerifiedAt = DateTime.UtcNow;
+    }
+
+    private async Task SyncExternalGroupsAsync(User user, IReadOnlyCollection<string> externalGroupIds)
+    {
+        if (externalGroupIds.Count == 0) return;
+
+        var normalized = externalGroupIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (normalized.Count == 0) return;
+
+        var groups = await _db.Groups
+            .Where(g => g.ExternalId != null && normalized.Contains(g.ExternalId))
+            .ToListAsync();
+
+        foreach (var group in groups)
+        {
+            if (user.UserGroups.Any(ug => ug.GroupId == group.Id)) continue;
+            user.UserGroups.Add(new UserGroup
+            {
+                UserId = user.Id,
+                GroupId = group.Id,
+                Role = GroupRole.Member,
+                JoinedAt = DateTime.UtcNow
+            });
+        }
+    }
 }
 
 // DTOs
 public record RegisterRequest(string Email, string Password, string DisplayName);
 public record LoginRequest(string Email, string Password);
+public record ExternalLoginRequest(
+    AuthProvider Provider,
+    string Email,
+    string DisplayName,
+    string ExternalId,
+    string? TenantId,
+    string? FirstName,
+    string? LastName,
+    IReadOnlyCollection<string> GroupExternalIds,
+    Dictionary<string, object?>? Metadata = null);
 
 public class AuthResult
 {

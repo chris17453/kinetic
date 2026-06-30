@@ -45,28 +45,25 @@ public class ScheduledJobsHostedService : BackgroundService
 
             try
             {
-                // Check scheduled reports every N minutes
-                if (now - lastScheduledCheck >= scheduledReportTimer)
+                // Legacy scheduled report dispatch is disabled unless its backing service is registered.
+                if (_options.EnableScheduledReports && now - lastScheduledCheck >= scheduledReportTimer)
                 {
                     await _bus.Publish(new TriggerScheduledReports { TriggerTime = now }, stoppingToken);
                     lastScheduledCheck = now;
                 }
 
-                // Audit cleanup every N hours
-                if (now - lastAuditCleanup >= auditCleanupTimer)
+                if (_options.EnableAuditCleanup && now - lastAuditCleanup >= auditCleanupTimer)
                 {
                     await _bus.Publish(new AuditCleanupMessage { RetentionDays = _options.AuditRetentionDays }, stoppingToken);
                     lastAuditCleanup = now;
                 }
 
-                // Temp data cleanup every N minutes
-                if (now - lastTempCleanup >= tempCleanupTimer)
+                if (_options.EnableTempCleanup && now - lastTempCleanup >= tempCleanupTimer)
                 {
                     await _bus.Publish(new TempDataCleanupMessage { MaxAgeMinutes = _options.TempDataMaxAgeMinutes }, stoppingToken);
                     lastTempCleanup = now;
                 }
 
-                // Entra sync every N hours
                 if (_options.EnableEntraSync && now - lastEntraSync >= entraSyncTimer)
                 {
                     await _bus.Publish(new EntraGroupSyncMessage { FullSync = false }, stoppingToken);
@@ -87,11 +84,19 @@ public class ScheduledJobsHostedService : BackgroundService
 
 public class ScheduledJobsOptions
 {
+    public bool EnableScheduledReports { get; set; }
     public int ScheduledReportCheckIntervalMinutes { get; set; } = 5;
+    public int RefreshScheduleCheckIntervalMinutes { get; set; } = 1;
+    public bool EnableRefreshSchedules { get; set; } = true;
+    public int RefreshJobCheckIntervalSeconds { get; set; } = 30;
+    public int RefreshJobBatchSize { get; set; } = 20;
+    public bool EnableRefreshJobProcessing { get; set; } = true;
+    public bool EnableAuditCleanup { get; set; }
     public int AuditCleanupIntervalHours { get; set; } = 24;
     public int AuditRetentionDays { get; set; } = 90;
+    public bool EnableTempCleanup { get; set; }
     public int TempCleanupIntervalMinutes { get; set; } = 60;
     public int TempDataMaxAgeMinutes { get; set; } = 1440;
     public int EntraSyncIntervalHours { get; set; } = 6;
-    public bool EnableEntraSync { get; set; } = true;
+    public bool EnableEntraSync { get; set; }
 }

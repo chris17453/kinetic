@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Kinetic.Core.Domain;
 using Kinetic.Core.Domain.Connections;
+using Kinetic.Core.Domain.Workspaces;
 using Kinetic.Data;
 using Kinetic.Adapters.Core;
 using System.Security.Cryptography;
@@ -44,10 +45,12 @@ public class ConnectionService : IConnectionService
             .ToListAsync();
 
         return await _db.Connections
+            .Include(c => c.Workspace)
             .Where(c => c.IsActive)
             .Where(c => 
                 (c.OwnerType == OwnerType.User && c.OwnerId == userId) ||
                 (c.OwnerType == OwnerType.Group && userGroupIds.Contains(c.OwnerId)) ||
+                (c.WorkspaceId.HasValue && _db.WorkspaceMembers.Any(m => m.WorkspaceId == c.WorkspaceId.Value && m.UserId == userId && m.IsActive)) ||
                 c.Visibility == Visibility.Public)
             .OrderBy(c => c.Name)
             .Skip((page - 1) * pageSize)
@@ -57,7 +60,9 @@ public class ConnectionService : IConnectionService
 
     public async Task<Connection?> GetConnectionByIdAsync(Guid id)
     {
-        return await _db.Connections.FindAsync(id);
+        return await _db.Connections
+            .Include(c => c.Workspace)
+            .FirstOrDefaultAsync(c => c.Id == id);
     }
 
     public async Task<Connection> CreateConnectionAsync(CreateConnectionRequest request, Guid userId)
@@ -69,6 +74,7 @@ public class ConnectionService : IConnectionService
             Description = request.Description,
             Type = request.Type,
             ConnectionString = EncryptConnectionString(request.ConnectionString),
+            WorkspaceId = request.WorkspaceId,
             OwnerType = OwnerType.User,
             OwnerId = userId,
             Visibility = request.Visibility,
@@ -96,6 +102,9 @@ public class ConnectionService : IConnectionService
 
         if (request.ConnectionString != null)
             connection.ConnectionString = EncryptConnectionString(request.ConnectionString);
+
+        if (request.WorkspaceId.HasValue)
+            connection.WorkspaceId = request.WorkspaceId.Value;
 
         if (request.Visibility.HasValue)
             connection.Visibility = request.Visibility.Value;
@@ -178,6 +187,7 @@ public class ConnectionService : IConnectionService
             .Where(c =>
                 (c.OwnerType == OwnerType.User && c.OwnerId == userId) ||
                 (c.OwnerType == OwnerType.Group && userGroupIds.Contains(c.OwnerId)) ||
+                (c.WorkspaceId.HasValue && _db.WorkspaceMembers.Any(m => m.WorkspaceId == c.WorkspaceId.Value && m.UserId == userId && m.IsActive)) ||
                 c.Visibility == Visibility.Public)
             .CountAsync();
     }
@@ -195,10 +205,7 @@ public class ConnectionService : IConnectionService
         var salt = new byte[16];
         RandomNumberGenerator.Fill(salt);
 
-        // Derive 32-byte key via PBKDF2-SHA256
-        using var kdf = new Rfc2898DeriveBytes(
-            Encoding.UTF8.GetBytes(_encryptionKey), salt, 100_000, HashAlgorithmName.SHA256);
-        var key = kdf.GetBytes(32);
+        var key = DeriveEncryptionKey(salt);
 
         // AES-GCM encryption
         var nonce = new byte[AesGcm.NonceByteSizes.MaxSize]; // 12 bytes
@@ -237,10 +244,7 @@ public class ConnectionService : IConnectionService
         var tag = fullBytes[(saltLen + nonceLen)..(saltLen + nonceLen + tagLen)];
         var ciphertext = fullBytes[(saltLen + nonceLen + tagLen)..];
 
-        // Re-derive key
-        using var kdf = new Rfc2898DeriveBytes(
-            Encoding.UTF8.GetBytes(_encryptionKey), salt, 100_000, HashAlgorithmName.SHA256);
-        var key = kdf.GetBytes(32);
+        var key = DeriveEncryptionKey(salt);
 
         // AES-GCM decryption (authenticates tag automatically)
         var plaintext = new byte[ciphertextLen];
@@ -248,6 +252,16 @@ public class ConnectionService : IConnectionService
         aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
 
         return Encoding.UTF8.GetString(plaintext);
+    }
+
+    private byte[] DeriveEncryptionKey(byte[] salt)
+    {
+        return Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(_encryptionKey),
+            salt,
+            100_000,
+            HashAlgorithmName.SHA256,
+            32);
     }
 }
 
@@ -257,10 +271,12 @@ public record CreateConnectionRequest(
     string? Description,
     ConnectionType Type,
     string ConnectionString,
+    Guid? WorkspaceId = null,
     Visibility Visibility = Visibility.Private);
 
 public record UpdateConnectionRequest(
     string? Name = null,
     string? Description = null,
     string? ConnectionString = null,
+    Guid? WorkspaceId = null,
     Visibility? Visibility = null);

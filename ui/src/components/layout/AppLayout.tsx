@@ -6,31 +6,41 @@ import { ErrorBoundary } from '../common/ErrorBoundary';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: 'fa-house', exact: true },
+  { name: 'Workspaces', href: '/workspaces', icon: 'fa-briefcase' },
+  { name: 'Datasets', href: '/datasets', icon: 'fa-cubes' },
+  { name: 'Dashboards', href: '/dashboards', icon: 'fa-gauge-high' },
   { name: 'Reports', href: '/catalog', icon: 'fa-chart-bar' },
   { name: 'Playground', href: '/playground', icon: 'fa-terminal' },
   { name: 'Connections', href: '/connections', icon: 'fa-server' },
   { name: 'Tables', href: '/tables', icon: 'fa-table' },
   { name: 'Data Upload', href: '/upload', icon: 'fa-upload' },
   { name: 'Stream Ingest', href: '/ingest', icon: 'fa-wave-square' },
+  { name: 'Refresh', href: '/refresh', icon: 'fa-rotate' },
 ];
 
 const adminItems = [
   { name: 'Users', href: '/admin/users', icon: 'fa-users' },
   { name: 'Groups', href: '/admin/groups', icon: 'fa-user-group' },
+  { name: 'Integrations', href: '/admin/integrations', icon: 'fa-plug-circle-bolt' },
   { name: 'Audit Log', href: '/admin/audit', icon: 'fa-clipboard-list' },
 ];
 
 // Page title map for document.title
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
+  '/workspaces': 'Workspaces',
+  '/datasets': 'Datasets',
+  '/dashboards': 'Dashboards',
   '/catalog': 'Report Catalog',
   '/playground': 'Query Playground',
   '/connections': 'Connections',
   '/tables': 'Tables',
   '/upload': 'Data Upload',
   '/ingest': 'Stream Ingest',
+  '/refresh': 'Refresh Operations',
   '/admin/users': 'Users',
   '/admin/groups': 'Groups',
+  '/admin/integrations': 'Integrations',
   '/admin/audit': 'Audit Log',
   '/profile': 'My Profile',
 };
@@ -40,6 +50,7 @@ export function AppLayout() {
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('kinetic-theme') === 'dark');
+  const hasStoredToken = Boolean(localStorage.getItem('kinetic_token'));
 
   // Set document title
   useEffect(() => {
@@ -64,6 +75,16 @@ export function AppLayout() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  if (!isAuthenticated && hasStoredToken) {
+    return (
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 

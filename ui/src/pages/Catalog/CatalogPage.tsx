@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../components/common/Toast';
 import api from '../../lib/api/client';
-import type { Report, Category } from '../../lib/api/types';
+import type { Report, Category, Workspace } from '../../lib/api/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -165,11 +165,23 @@ function ReportCard({ report, onFavorite, onRate }: ReportCardProps) {
           {report.description || 'No description provided.'}
         </p>
 
-        {/* Category + Tags */}
+        {/* Workspace, Category + Tags */}
         <div className="d-flex flex-wrap gap-1 mb-2">
+          {(report.workspaceName || report.workspace?.name) && (
+            <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style={{ fontSize: '0.68rem' }}>
+              <i className="fa-solid fa-briefcase me-1"></i>
+              {report.workspaceName || report.workspace?.name}
+            </span>
+          )}
           {report.category && (
             <span className="badge bg-primary bg-opacity-10 text-primary" style={{ fontSize: '0.68rem' }}>
               {report.category.icon} {report.category.name}
+            </span>
+          )}
+          {(report.datasetName || report.dataset?.name) && (
+            <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style={{ fontSize: '0.68rem' }}>
+              <i className="fa-solid fa-cubes me-1"></i>
+              {report.datasetName || report.dataset?.name}
             </span>
           )}
           {report.tags?.slice(0, 3).map(tag => (
@@ -241,6 +253,18 @@ function ReportListItem({ report, onFavorite }: ReportListItemProps) {
           </div>
           <div className="text-muted small text-truncate d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.75rem' }}>
             {report.connection?.name && <span>{report.connection.name}</span>}
+            {(report.workspaceName || report.workspace?.name) && (
+              <span>
+                <i className="fa-solid fa-briefcase me-1"></i>
+                {report.workspaceName || report.workspace?.name}
+              </span>
+            )}
+            {(report.datasetName || report.dataset?.name) && (
+              <span>
+                <i className="fa-solid fa-cubes me-1"></i>
+                {report.datasetName || report.dataset?.name}
+              </span>
+            )}
             {report.tags?.slice(0, 2).map(t => (
               <span key={t} className="badge bg-light text-secondary border" style={{ fontSize: '0.65rem' }}>
                 #{t}
@@ -337,6 +361,7 @@ export function CatalogPage() {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') ?? '');
   const [tagFilter, setTagFilter] = useState(searchParams.get('tag') ?? '');
+  const [workspaceFilter, setWorkspaceFilter] = useState(searchParams.get('workspaceId') ?? '');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filterScope, setFilterScope] = useState<FilterScope>((searchParams.get('scope') as FilterScope) ?? 'all');
   const [sortBy, setSortBy] = useState<SortOption>((searchParams.get('sort') as SortOption) ?? 'newest');
@@ -358,15 +383,16 @@ export function CatalogPage() {
     if (debouncedSearch) params.q = debouncedSearch;
     if (categoryFilter) params.category = categoryFilter;
     if (tagFilter) params.tag = tagFilter;
+    if (workspaceFilter) params.workspaceId = workspaceFilter;
     if (filterScope !== 'all') params.scope = filterScope;
     if (sortBy !== 'newest') params.sort = sortBy;
     setSearchParams(params, { replace: true });
-  }, [debouncedSearch, categoryFilter, tagFilter, filterScope, sortBy, setSearchParams]);
+  }, [debouncedSearch, categoryFilter, tagFilter, workspaceFilter, filterScope, sortBy, setSearchParams]);
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: reportsData, isLoading } = useQuery({
-    queryKey: ['reports', 'catalog', { search: debouncedSearch, categoryFilter, tagFilter, filterScope, sortBy, page }],
+    queryKey: ['reports', 'catalog', { search: debouncedSearch, categoryFilter, tagFilter, workspaceFilter, filterScope, sortBy, page }],
     queryFn: async () => {
       const params: Record<string, string | number> = {
         pageSize: PAGE_SIZE,
@@ -375,6 +401,7 @@ export function CatalogPage() {
       };
       if (debouncedSearch) params.search = debouncedSearch;
       if (categoryFilter) params.categoryId = categoryFilter;
+      if (workspaceFilter) params.workspaceId = workspaceFilter;
       if (filterScope !== 'all') params.scope = filterScope;
       if (tagFilter) params.tag = tagFilter;
       const res = await api.get<{ items: Report[]; total: number; totalPages: number }>('/reports', { params });
@@ -396,6 +423,14 @@ export function CatalogPage() {
     queryFn: async () => {
       const res = await api.get<string[]>('/reports/tags');
       return res.data;
+    },
+  });
+
+  const { data: workspaces } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const res = await api.get<{ items: Workspace[] }>('/workspaces');
+      return res.data.items;
     },
   });
 
@@ -433,15 +468,17 @@ export function CatalogPage() {
   const reports = reportsData?.items ?? [];
   const total = reportsData?.total ?? 0;
   const totalPages = reportsData?.totalPages ?? 1;
-  const hasActiveFilters = !!(debouncedSearch || categoryFilter || tagFilter || filterScope !== 'all');
+  const hasActiveFilters = !!(debouncedSearch || categoryFilter || tagFilter || workspaceFilter || filterScope !== 'all');
 
   const activeCategoryName = categories?.find(c => c.id === categoryFilter)?.name;
+  const activeWorkspaceName = workspaces?.find(w => w.id === workspaceFilter)?.name;
 
   function clearAllFilters() {
     setSearch('');
     setDebouncedSearch('');
     setCategoryFilter('');
     setTagFilter('');
+    setWorkspaceFilter('');
     setFilterScope('all');
     setPage(1);
   }
@@ -471,6 +508,45 @@ export function CatalogPage() {
       <div className="row g-4">
         {/* ── Left Sidebar ── */}
         <div className="col-lg-3 d-none d-lg-block">
+          {/* Workspace filter */}
+          <div className="card border-0 shadow-sm mb-3">
+            <div className="card-header bg-white py-3 border-bottom">
+              <h6 className="fw-bold mb-0">
+                <i className="fa-solid fa-briefcase me-2 text-muted" />
+                Workspaces
+              </h6>
+            </div>
+            <div className="list-group list-group-flush">
+              <button
+                className={`list-group-item list-group-item-action d-flex align-items-center justify-content-between small py-2 ${!workspaceFilter ? 'active' : ''}`}
+                onClick={() => { setWorkspaceFilter(''); setPage(1); }}
+              >
+                <span>
+                  <i className="fa-solid fa-border-all me-2" />
+                  All Workspaces
+                </span>
+              </button>
+              {workspaces?.map(workspace => {
+                const active = workspaceFilter === workspace.id;
+                return (
+                  <button
+                    key={workspace.id}
+                    className={`list-group-item list-group-item-action d-flex align-items-center justify-content-between small py-2 ${active ? 'active' : ''}`}
+                    onClick={() => { setWorkspaceFilter(active ? '' : workspace.id); setPage(1); }}
+                  >
+                    <span className="text-truncate">
+                      <i className={`fa-solid fa-${workspace.icon || 'briefcase'} me-2`} />
+                      {workspace.name}
+                    </span>
+                    <span className={`badge rounded-pill ${active ? 'bg-white text-primary' : 'bg-secondary'}`}>
+                      {workspace.reportCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Category tree */}
           <div className="card border-0 shadow-sm mb-3">
             <div className="card-header bg-white py-3 border-bottom">
@@ -645,6 +721,21 @@ export function CatalogPage() {
               {showMobileFilters && (
                 <div className="d-lg-none mt-3 pt-3 border-top">
                   <div className="row g-2">
+                    <div className="col-12">
+                      <label className="form-label small fw-semibold text-muted mb-1">Workspace</label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={workspaceFilter}
+                        onChange={e => { setWorkspaceFilter(e.target.value); setPage(1); }}
+                      >
+                        <option value="">All Workspaces</option>
+                        {workspaces?.map(workspace => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="col-6">
                       <label className="form-label small fw-semibold text-muted mb-1">Category</label>
                       <select
@@ -720,6 +811,19 @@ export function CatalogPage() {
                         style={{ fontSize: '0.45rem' }}
                         onClick={() => setTagFilter('')}
                         aria-label="Remove tag filter"
+                      />
+                    </span>
+                  )}
+                  {workspaceFilter && activeWorkspaceName && (
+                    <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 d-inline-flex align-items-center gap-1">
+                      <i className="fa-solid fa-briefcase" style={{ fontSize: '0.6rem' }} />
+                      {activeWorkspaceName}
+                      <button
+                        type="button"
+                        className="btn-close"
+                        style={{ fontSize: '0.45rem' }}
+                        onClick={() => setWorkspaceFilter('')}
+                        aria-label="Remove workspace filter"
                       />
                     </span>
                   )}

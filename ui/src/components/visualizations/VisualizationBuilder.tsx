@@ -1,10 +1,12 @@
-import type { ColumnDefinition, VisualizationType } from '../../lib/api/types';
+import type { ColumnDefinition, FieldAggregation, VisualizationFieldWell, VisualizationLayout, VisualizationType } from '../../lib/api/types';
 
 interface VisualizationConfig {
   id: string;
   name: string;
   type: VisualizationType;
   isDefault: boolean;
+  fieldWells?: VisualizationFieldWell[];
+  layout?: VisualizationLayout;
   config: Record<string, unknown>;
 }
 
@@ -39,6 +41,8 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
       name: `${vizTypes.find((v) => v.value === type)?.label || type}`,
       type,
       isDefault: visualizations.length === 0,
+      fieldWells: getDefaultFieldWells(type, columns),
+      layout: getDefaultLayout(visualizations.length),
       config: getDefaultConfig(type),
     };
     onChange([...visualizations, viz]);
@@ -131,6 +135,23 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
               </div>
 
               <div className="p-4">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+                  <div className="xl:col-span-2">
+                    <FieldWellEditor
+                      type={viz.type}
+                      columns={columns}
+                      fieldWells={viz.fieldWells ?? []}
+                      onChange={(fieldWells, compatibilityConfig) => updateVisualization(index, {
+                        fieldWells,
+                        config: { ...viz.config, ...compatibilityConfig },
+                      })}
+                    />
+                  </div>
+                  <LayoutEditor
+                    layout={viz.layout ?? getDefaultLayout(index)}
+                    onChange={(layout) => updateVisualization(index, { layout })}
+                  />
+                </div>
                 <VizConfigEditor
                   type={viz.type}
                   config={viz.config}
@@ -143,6 +164,136 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
         </div>
       )}
     </div>
+  );
+}
+
+interface FieldWellEditorProps {
+  type: VisualizationType;
+  columns: ColumnDefinition[];
+  fieldWells: VisualizationFieldWell[];
+  onChange: (fieldWells: VisualizationFieldWell[], compatibilityConfig: Record<string, unknown>) => void;
+}
+
+const aggregations: FieldAggregation[] = ['None', 'Sum', 'Average', 'Min', 'Max', 'Count', 'CountDistinct'];
+
+function FieldWellEditor({ type, columns, fieldWells, onChange }: FieldWellEditorProps) {
+  const roles = fieldWellRoles(type);
+  const visibleColumns = columns.filter((c) => c.visible);
+
+  const updateRole = (role: string, updates: Partial<VisualizationFieldWell>) => {
+    const existing = fieldWells.find(well => well.role === role);
+    const nextWell: VisualizationFieldWell = {
+      role,
+      field: '',
+      aggregation: role === 'Values' ? 'Sum' : 'None',
+      displayOrder: roles.indexOf(role),
+      ...existing,
+      ...updates,
+    };
+
+    const next = [
+      ...fieldWells.filter(well => well.role !== role),
+      nextWell,
+    ]
+      .filter(well => well.field || well.role === role)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+
+    onChange(next, fieldWellsToCompatibilityConfig(type, next));
+  };
+
+  return (
+    <div className="border rounded p-3">
+      <div className="text-sm font-medium text-gray-700 mb-3">Field Wells</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {roles.map((role) => {
+          const well = fieldWells.find(item => item.role === role);
+          return (
+            <div key={role}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{role}</label>
+              <div className="d-flex gap-2">
+                <select
+                  className="form-select form-select-sm"
+                  value={well?.field ?? ''}
+                  onChange={(e) => {
+                    const column = visibleColumns.find(col => col.sourceName === e.target.value);
+                    updateRole(role, {
+                      field: e.target.value,
+                      displayName: column?.displayName,
+                    });
+                  }}
+                >
+                  <option value="">None</option>
+                  {visibleColumns.map((col) => (
+                    <option key={col.sourceName} value={col.sourceName}>
+                      {col.displayName || col.sourceName}
+                    </option>
+                  ))}
+                </select>
+                {role === 'Values' && (
+                  <select
+                    className="form-select form-select-sm"
+                    style={{ maxWidth: 120 }}
+                    value={well?.aggregation ?? 'Sum'}
+                    onChange={(e) => updateRole(role, { aggregation: e.target.value as FieldAggregation })}
+                  >
+                    {aggregations.map(aggregation => (
+                      <option key={aggregation} value={aggregation}>{aggregation}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface LayoutEditorProps {
+  layout: VisualizationLayout;
+  onChange: (layout: VisualizationLayout) => void;
+}
+
+function LayoutEditor({ layout, onChange }: LayoutEditorProps) {
+  const update = (key: keyof VisualizationLayout, value: number | boolean) => {
+    onChange({ ...layout, [key]: value });
+  };
+
+  return (
+    <div className="border rounded p-3">
+      <div className="text-sm font-medium text-gray-700 mb-3">Canvas Layout</div>
+      <div className="grid grid-cols-3 gap-2">
+        <NumberField label="Page" value={layout.page} min={1} onChange={value => update('page', value)} />
+        <NumberField label="X" value={layout.x} min={0} onChange={value => update('x', value)} />
+        <NumberField label="Y" value={layout.y} min={0} onChange={value => update('y', value)} />
+        <NumberField label="W" value={layout.width} min={1} onChange={value => update('width', value)} />
+        <NumberField label="H" value={layout.height} min={1} onChange={value => update('height', value)} />
+        <label className="d-flex align-items-end gap-2 small pb-1">
+          <input
+            type="checkbox"
+            checked={layout.isHidden}
+            onChange={e => update('isHidden', e.target.checked)}
+          />
+          Hidden
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function NumberField({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (value: number) => void }) {
+  return (
+    <label className="small text-gray-600">
+      {label}
+      <input
+        type="number"
+        className="form-control form-control-sm mt-1"
+        min={min}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+      />
+    </label>
   );
 }
 
@@ -420,4 +571,55 @@ function getDefaultConfig(type: VisualizationType): Record<string, unknown> {
     default:
       return {};
   }
+}
+
+function fieldWellRoles(type: VisualizationType): string[] {
+  if (type === 'Table') return ['Values', 'Filters'];
+  if (['Pie', 'Doughnut', 'Pie3D'].includes(type)) return ['Category', 'Values', 'Tooltips', 'Filters'];
+  if (type === 'KpiCard' || type === 'Gauge') return ['Values', 'Target', 'Trend', 'Filters'];
+  return ['Category', 'Values', 'Series', 'Tooltips', 'Filters'];
+}
+
+function getDefaultFieldWells(type: VisualizationType, columns: ColumnDefinition[]): VisualizationFieldWell[] {
+  const visible = columns.filter(column => column.visible);
+  const roles = fieldWellRoles(type);
+  return roles
+    .map<VisualizationFieldWell | null>((role, index) => {
+      const column = visible[index === 0 ? 0 : Math.min(index, visible.length - 1)];
+      if (!column || (role !== 'Category' && role !== 'Values')) return null;
+      return {
+        role,
+        field: column.sourceName,
+        displayName: column.displayName,
+        aggregation: role === 'Values' ? 'Sum' as FieldAggregation : 'None' as FieldAggregation,
+        displayOrder: index,
+      };
+    })
+    .filter((well): well is VisualizationFieldWell => well !== null);
+}
+
+function getDefaultLayout(index: number): VisualizationLayout {
+  return {
+    page: 1,
+    x: (index % 2) * 6,
+    y: Math.floor(index / 2) * 4,
+    width: 6,
+    height: 4,
+    isHidden: false,
+  };
+}
+
+function fieldWellsToCompatibilityConfig(type: VisualizationType, fieldWells: VisualizationFieldWell[]): Record<string, unknown> {
+  const byRole = (role: string) => fieldWells.find(well => well.role === role)?.field;
+  if (type === 'Table') return {};
+  if (['Pie', 'Doughnut', 'Pie3D'].includes(type)) {
+    return { labelColumn: byRole('Category'), valueColumn: byRole('Values') };
+  }
+  if (type === 'KpiCard') {
+    return { valueColumn: byRole('Values'), compareColumn: byRole('Target'), sparklineColumn: byRole('Trend') };
+  }
+  if (type === 'Gauge') {
+    return { valueColumn: byRole('Values'), targetValue: byRole('Target') };
+  }
+  return { xAxisColumn: byRole('Category'), yAxisColumn: byRole('Values'), seriesColumn: byRole('Series') };
 }

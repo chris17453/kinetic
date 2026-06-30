@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate, useParams, useBeforeUnload } from 'react-router-dom';
+import { useNavigate, useParams, useBeforeUnload, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import api from '../../lib/api/client';
-import type { Connection, ParameterDefinition, ColumnDefinition, VisualizationType, Visibility } from '../../lib/api/types';
+import type { Connection, Dataset, ParameterDefinition, ColumnDefinition, VisualizationFieldWell, VisualizationLayout, VisualizationType, Visibility, Workspace } from '../../lib/api/types';
 import { ParameterBuilder } from '../../components/parameters/ParameterBuilder';
 import { ColumnEditor } from '../../components/columns/ColumnEditor';
 import { VisualizationBuilder } from '../../components/visualizations/VisualizationBuilder';
@@ -16,9 +16,44 @@ interface ScheduleConfig {
   cronExpression: string;
 }
 
+interface BuilderVisualization {
+  id: string;
+  name: string;
+  type: VisualizationType;
+  isDefault: boolean;
+  fieldWells?: VisualizationFieldWell[];
+  layout?: VisualizationLayout;
+  config: Record<string, unknown>;
+}
+
+interface ReportApiPayload {
+  name: string;
+  description?: string;
+  workspaceId?: string;
+  datasetId?: string;
+  connectionId: string;
+  queryText: string;
+  autoRun: boolean;
+  executionMode: 'Auto' | 'Manual';
+  cacheMode: 'Live' | 'TempDb';
+  cacheTtlSeconds?: number;
+  visibility: Visibility;
+  categoryId?: string;
+  tags: string[];
+  allowEmbed: boolean;
+  parameters: ParameterDefinition[];
+  columns: ColumnDefinition[];
+  visualizations: Record<string, unknown>[];
+}
+
 interface ReportForm {
   name: string;
   description: string;
+  workspaceId: string;
+  datasetId: string;
+  semanticDimensionFieldIds: string[];
+  semanticMeasureFieldIds: string[];
+  semanticMeasureIds: string[];
   connectionId: string;
   queryText: string;
   executionMode: 'Auto' | 'Manual';
@@ -30,19 +65,18 @@ interface ReportForm {
   allowEmbed: boolean;
   parameters: ParameterDefinition[];
   columns: ColumnDefinition[];
-  visualizations: Array<{
-    id: string;
-    name: string;
-    type: VisualizationType;
-    isDefault: boolean;
-    config: Record<string, unknown>;
-  }>;
+  visualizations: BuilderVisualization[];
   schedule: ScheduleConfig;
 }
 
 const EMPTY_FORM: ReportForm = {
   name: '',
   description: '',
+  workspaceId: '',
+  datasetId: '',
+  semanticDimensionFieldIds: [],
+  semanticMeasureFieldIds: [],
+  semanticMeasureIds: [],
   connectionId: '',
   queryText: '',
   executionMode: 'Manual',
@@ -70,12 +104,16 @@ interface SchemaTable {
 export function ReportBuilderPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const isEditing = !!id;
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<Tab>('query');
-  const [form, setForm] = useState<ReportForm>(EMPTY_FORM);
+  const [form, setForm] = useState<ReportForm>(() => ({
+    ...EMPTY_FORM,
+    workspaceId: searchParams.get('workspaceId') ?? '',
+  }));
   const initialFormRef = useRef<ReportForm | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [vizWarning, setVizWarning] = useState(false);
@@ -128,6 +166,23 @@ export function ReportBuilderPage() {
     },
   });
 
+  const { data: workspaces } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const res = await api.get<{ items: Workspace[] }>('/workspaces');
+      return res.data.items;
+    },
+  });
+
+  const { data: datasets } = useQuery({
+    queryKey: ['datasets', form.workspaceId],
+    queryFn: async () => {
+      const params = form.workspaceId ? { workspaceId: form.workspaceId } : undefined;
+      const res = await api.get<{ items: Dataset[] }>('/datasets', { params });
+      return res.data.items;
+    },
+  });
+
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
@@ -142,23 +197,7 @@ export function ReportBuilderPage() {
     queryFn: async () => {
       const res = await api.get(`/reports/${id}`);
       const report = res.data;
-      const loaded: ReportForm = {
-        name: report.name,
-        description: report.description || '',
-        connectionId: report.connectionId,
-        queryText: report.queryText,
-        executionMode: report.executionMode,
-        cacheMode: report.cacheMode,
-        cacheTtlSeconds: report.cacheTtlSeconds ?? 300,
-        visibility: report.visibility,
-        categoryId: report.categoryId || '',
-        tags: report.tags || [],
-        allowEmbed: report.allowEmbed,
-        parameters: report.parameters || [],
-        columns: report.columns || [],
-        visualizations: report.visualizations || [],
-        schedule: report.schedule ?? { enabled: false, cronExpression: '0 8 * * 1-5' },
-      };
+      const loaded = reportToForm(report);
       setForm(loaded);
       initialFormRef.current = loaded;
       setIsDirty(false);
@@ -179,10 +218,11 @@ export function ReportBuilderPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const payload = formToApiPayload(form);
       if (isEditing) {
-        return api.put(`/reports/${id}`, form);
+        return api.put(`/reports/${id}`, payload);
       }
-      return api.post('/reports', form);
+      return api.post('/reports', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -197,18 +237,28 @@ export function ReportBuilderPage() {
 
   const detectColumnsMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/reports/detect-columns', {
+      const res = await api.post('/query/preview', {
         connectionId: form.connectionId,
         query: form.queryText,
+        limit: 5,
       });
       return res.data;
     },
     onSuccess: (data) => {
-      setTestResult(data);
-      if (form.columns.length === 0 && data.columns) {
+      const columns = (data.columns || []).map((col: { name: string; type?: string; dataType?: string }) => ({
+        name: col.name,
+        type: col.type ?? col.dataType ?? 'string',
+      }));
+      const preview = {
+        columns,
+        rows: data.rows || [],
+        rowCount: data.rowsReturned ?? data.rowCount ?? data.rows?.length ?? 0,
+      };
+      setTestResult(preview);
+      if (form.columns.length === 0 && columns.length > 0) {
         updateForm((prev) => ({
           ...prev,
-          columns: data.columns.map((col: { name: string; type: string }, i: number) => ({
+          columns: columns.map((col: { name: string; type: string }, i: number) => ({
             id: crypto.randomUUID(),
             sourceName: col.name,
             displayName: col.name,
@@ -223,6 +273,33 @@ export function ReportBuilderPage() {
     onError: (err: Error) => {
       toast.error('Query failed', err.message);
     },
+  });
+
+  const generateDatasetQueryMutation = useMutation({
+    mutationFn: async () => {
+      const dataset = datasets?.find(d => d.id === form.datasetId);
+      if (!dataset) throw new Error('Select a dataset first');
+
+      const dimensionFieldIds = form.semanticDimensionFieldIds;
+      const measureFieldIds = form.semanticMeasureFieldIds;
+      const measureIds = form.semanticMeasureIds;
+
+      if (dimensionFieldIds.length === 0 && measureFieldIds.length === 0 && measureIds.length === 0) {
+        throw new Error('Select at least one dataset field or measure');
+      }
+
+      const res = await api.post<{ query: string }>(`/datasets/${dataset.id}/query`, {
+        dimensionFieldIds,
+        measureFieldIds,
+        measureIds,
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      updateForm({ queryText: data.query });
+      toast.success('Dataset query generated');
+    },
+    onError: (err: Error) => toast.error('Failed to generate dataset query', err.message),
   });
 
   const handleTabChange = (tab: Tab) => {
@@ -370,9 +447,12 @@ export function ReportBuilderPage() {
             form={form}
             updateForm={updateForm}
             connections={connections || []}
+            datasets={datasets || []}
             testResult={testResult}
             onTest={() => detectColumnsMutation.mutate()}
+            onGenerateDatasetQuery={() => generateDatasetQueryMutation.mutate()}
             isTesting={detectColumnsMutation.isPending}
+            isGeneratingDatasetQuery={generateDatasetQueryMutation.isPending}
             schemaSidebarOpen={schemaSidebarOpen}
             onToggleSidebar={() => setSchemaSidebarOpen((v) => !v)}
             schemaTables={schemaTables || []}
@@ -402,7 +482,13 @@ export function ReportBuilderPage() {
           />
         )}
         {activeTab === 'settings' && (
-          <SettingsTab form={form} updateForm={updateForm} categories={categories || []} />
+          <SettingsTab
+            form={form}
+            updateForm={updateForm}
+            categories={categories || []}
+            workspaces={workspaces || []}
+            datasets={datasets || []}
+          />
         )}
         {activeTab === 'schedule' && (
           <ScheduleTab
@@ -415,19 +501,141 @@ export function ReportBuilderPage() {
   );
 }
 
+function reportToForm(report: any): ReportForm {
+  return {
+    name: report.name ?? '',
+    description: report.description || '',
+    workspaceId: report.workspaceId || '',
+    datasetId: report.datasetId || '',
+    semanticDimensionFieldIds: [],
+    semanticMeasureFieldIds: [],
+    semanticMeasureIds: [],
+    connectionId: report.connectionId ?? '',
+    queryText: report.queryText ?? '',
+    executionMode: report.executionMode ?? (report.autoRun ? 'Auto' : 'Manual'),
+    cacheMode: report.cacheMode === 'TempDb' ? 'TempDb' : 'Live',
+    cacheTtlSeconds: report.cacheTtlSeconds ?? 300,
+    visibility: report.visibility ?? 'Private',
+    categoryId: report.categoryId || '',
+    tags: report.tags || [],
+    allowEmbed: report.allowEmbed ?? false,
+    parameters: report.parameters || [],
+    columns: report.columns || [],
+    visualizations: (report.visualizations || []).map(apiVisualizationToBuilder),
+    schedule: report.schedule ?? { enabled: false, cronExpression: '0 8 * * 1-5' },
+  };
+}
+
+function formToApiPayload(form: ReportForm): ReportApiPayload {
+  return {
+    name: form.name,
+    description: form.description || undefined,
+    workspaceId: form.workspaceId || undefined,
+    datasetId: form.datasetId || undefined,
+    connectionId: form.connectionId,
+    queryText: form.queryText,
+    autoRun: form.executionMode === 'Auto',
+    executionMode: form.executionMode,
+    cacheMode: form.cacheMode,
+    cacheTtlSeconds: form.cacheMode === 'TempDb' ? form.cacheTtlSeconds : undefined,
+    visibility: form.visibility,
+    categoryId: form.categoryId || undefined,
+    tags: form.tags,
+    allowEmbed: form.allowEmbed,
+    parameters: form.parameters,
+    columns: form.columns,
+    visualizations: form.visualizations.map(builderVisualizationToApi),
+  };
+}
+
+function apiVisualizationToBuilder(viz: any): BuilderVisualization {
+  const {
+    id,
+    name,
+    title,
+    type,
+    isDefault,
+    showLegend,
+    colorScheme,
+    displayOrder,
+    fieldWells,
+    layout,
+    interactions,
+    '$type': _typeDiscriminator,
+    ...config
+  } = viz;
+
+  return {
+    id: id || crypto.randomUUID(),
+    name: name || title || type || 'Visualization',
+    type,
+    isDefault: !!isDefault,
+    fieldWells: fieldWells ?? [],
+    layout,
+    config: {
+      ...config,
+      showLegend: showLegend ?? config.showLegend,
+      colorScheme,
+      displayOrder,
+      interactions,
+    },
+  };
+}
+
+function builderVisualizationToApi(viz: BuilderVisualization, index: number): Record<string, unknown> {
+  const config = viz.config || {};
+  return {
+    $type: visualizationDiscriminator(viz.type),
+    id: viz.id,
+    name: viz.name,
+    title: viz.name,
+    type: viz.type,
+    isDefault: viz.isDefault,
+    showLegend: config.showLegend ?? true,
+    colorScheme: config.colorScheme,
+    displayOrder: index,
+    fieldWells: viz.fieldWells ?? [],
+    layout: viz.layout,
+    interactions: config.interactions,
+    ...config,
+  };
+}
+
+function visualizationDiscriminator(type: VisualizationType): string {
+  if (type === 'Table') return 'table';
+  if (['Bar', 'BarHorizontal', 'BarStacked', 'Bar3D', 'Line', 'Area', 'AreaStacked'].includes(type)) return 'chart';
+  if (['Pie', 'Pie3D', 'Doughnut'].includes(type)) return 'pie';
+  if (type === 'Gauge') return 'gauge';
+  if (type === 'KpiCard') return 'kpi';
+  if (type === 'Scatter') return 'scatter';
+  if (type === 'Bubble') return 'bubble';
+  if (type === 'Radar') return 'radar';
+  if (type === 'Funnel') return 'funnel';
+  if (type === 'Heatmap') return 'heatmap';
+  if (type === 'Treemap') return 'treemap';
+  return 'table';
+}
+
+function toggleId(ids: string[], id: string): string[] {
+  return ids.includes(id) ? ids.filter(existing => existing !== id) : [...ids, id];
+}
+
 // ─── Query Tab ────────────────────────────────────────────────────────────────
 
 interface QueryTabProps {
   form: ReportForm;
   updateForm: (updater: Partial<ReportForm> | ((prev: ReportForm) => ReportForm)) => void;
   connections: Connection[];
+  datasets: Dataset[];
   testResult: {
     columns: Array<{ name: string; type: string }>;
     rows: Record<string, unknown>[];
     rowCount: number;
   } | null;
   onTest: () => void;
+  onGenerateDatasetQuery: () => void;
   isTesting: boolean;
+  isGeneratingDatasetQuery: boolean;
   schemaSidebarOpen: boolean;
   onToggleSidebar: () => void;
   schemaTables: SchemaTable[];
@@ -441,9 +649,12 @@ function QueryTab({
   form,
   updateForm,
   connections,
+  datasets,
   testResult,
   onTest,
+  onGenerateDatasetQuery,
   isTesting,
+  isGeneratingDatasetQuery,
   schemaSidebarOpen,
   onToggleSidebar,
   schemaTables,
@@ -452,6 +663,13 @@ function QueryTab({
   onInsertTableName,
   editorRef,
 }: QueryTabProps) {
+  const selectedDataset = datasets.find(dataset => dataset.id === form.datasetId);
+  const selectedDimensions = selectedDataset?.fields.filter(field => !field.isHidden && field.kind === 'Dimension') ?? [];
+  const selectedMeasureFields = selectedDataset?.fields.filter(field => !field.isHidden && field.kind === 'Measure') ?? [];
+  const selectedSemanticMeasures = selectedDataset?.semanticModel?.measures ?? [];
+  const selectedSemanticItemCount =
+    form.semanticDimensionFieldIds.length + form.semanticMeasureFieldIds.length + form.semanticMeasureIds.length;
+
   return (
     <div className="d-flex flex-column h-100 gap-2">
       {/* Toolbar */}
@@ -470,9 +688,9 @@ function QueryTab({
           ))}
         </select>
 
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={onTest}
+	        <button
+	          className="btn btn-primary btn-sm"
+	          onClick={onTest}
           disabled={!form.connectionId || !form.queryText.trim() || isTesting}
         >
           {isTesting ? (
@@ -486,9 +704,35 @@ function QueryTab({
               Run Preview
             </>
           )}
+	        </button>
+
+        <button
+          className="btn btn-outline-secondary btn-sm"
+          onClick={onGenerateDatasetQuery}
+          disabled={!form.datasetId || selectedSemanticItemCount === 0 || isGeneratingDatasetQuery}
+          title="Generate SQL from selected dataset fields and measures"
+        >
+          {isGeneratingDatasetQuery ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+              Generating...
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-cubes me-1"></i>
+              Generate from Dataset
+            </>
+          )}
         </button>
 
-        <div className="ms-auto">
+        {selectedDataset && (
+          <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+            <i className="fa-solid fa-cubes me-1"></i>
+            {selectedDataset.name} - {selectedSemanticItemCount} selected
+          </span>
+        )}
+
+	        <div className="ms-auto">
           <button
             className={`btn btn-sm ${schemaSidebarOpen ? 'btn-secondary' : 'btn-outline-secondary'}`}
             onClick={onToggleSidebar}
@@ -499,6 +743,100 @@ function QueryTab({
           </button>
         </div>
       </div>
+
+      {selectedDataset && (
+        <div className="card border-0 shadow-sm">
+          <div className="card-header bg-white py-2 d-flex align-items-center justify-content-between">
+            <span className="fw-semibold small">
+              <i className="fa-solid fa-layer-group me-1"></i>
+              Dataset fields
+            </span>
+            <div className="btn-group btn-group-sm">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() =>
+                  updateForm({
+                    semanticDimensionFieldIds: selectedDimensions.map(field => field.id),
+                    semanticMeasureFieldIds: selectedMeasureFields.map(field => field.id),
+                    semanticMeasureIds: selectedSemanticMeasures.map(measure => measure.id),
+                  })
+                }
+              >
+                Use visible fields
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() =>
+                  updateForm({
+                    semanticDimensionFieldIds: [],
+                    semanticMeasureFieldIds: [],
+                    semanticMeasureIds: [],
+                  })
+                }
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="card-body py-2">
+            <div className="row g-3">
+              <DatasetFieldPicker
+                title="Dimensions"
+                icon="fa-table-list"
+                emptyText="No dimension fields"
+                items={selectedDimensions.map(field => ({
+                  id: field.id,
+                  label: field.displayName || field.name,
+                  meta: field.dataType,
+                }))}
+                selectedIds={form.semanticDimensionFieldIds}
+                onToggle={(id) =>
+                  updateForm(prev => ({
+                    ...prev,
+                    semanticDimensionFieldIds: toggleId(prev.semanticDimensionFieldIds, id),
+                  }))
+                }
+              />
+              <DatasetFieldPicker
+                title="Measure fields"
+                icon="fa-calculator"
+                emptyText="No aggregatable fields"
+                items={selectedMeasureFields.map(field => ({
+                  id: field.id,
+                  label: field.displayName || field.name,
+                  meta: field.defaultAggregation || field.dataType,
+                }))}
+                selectedIds={form.semanticMeasureFieldIds}
+                onToggle={(id) =>
+                  updateForm(prev => ({
+                    ...prev,
+                    semanticMeasureFieldIds: toggleId(prev.semanticMeasureFieldIds, id),
+                  }))
+                }
+              />
+              <DatasetFieldPicker
+                title="Measures"
+                icon="fa-square-root-variable"
+                emptyText="No semantic measures"
+                items={selectedSemanticMeasures.map(measure => ({
+                  id: measure.id,
+                  label: measure.displayName || measure.name,
+                  meta: measure.expression,
+                }))}
+                selectedIds={form.semanticMeasureIds}
+                onToggle={(id) =>
+                  updateForm(prev => ({
+                    ...prev,
+                    semanticMeasureIds: toggleId(prev.semanticMeasureIds, id),
+                  }))
+                }
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Editor + Preview + Sidebar */}
       <div className="d-flex flex-grow-1 gap-2 overflow-hidden">
@@ -665,15 +1003,61 @@ function QueryTab({
   );
 }
 
+interface DatasetFieldPickerProps {
+  title: string;
+  icon: string;
+  emptyText: string;
+  items: Array<{ id: string; label: string; meta?: string }>;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+}
+
+function DatasetFieldPicker({ title, icon, emptyText, items, selectedIds, onToggle }: DatasetFieldPickerProps) {
+  return (
+    <div className="col-lg-4">
+      <div className="border rounded-2 overflow-hidden h-100">
+        <div className="bg-light px-2 py-1 small fw-semibold d-flex align-items-center justify-content-between">
+          <span>
+            <i className={`fa-solid ${icon} me-1`}></i>
+            {title}
+          </span>
+          <span className="badge text-bg-secondary">{selectedIds.length}</span>
+        </div>
+        <div className="list-group list-group-flush" style={{ maxHeight: 132, overflowY: 'auto' }}>
+          {items.length === 0 && (
+            <div className="list-group-item text-muted small py-2">{emptyText}</div>
+          )}
+          {items.map(item => (
+            <label key={item.id} className="list-group-item py-1 px-2 small d-flex align-items-start gap-2">
+              <input
+                className="form-check-input mt-1"
+                type="checkbox"
+                checked={selectedIds.includes(item.id)}
+                onChange={() => onToggle(item.id)}
+              />
+              <span className="text-truncate" style={{ minWidth: 0 }}>
+                <span className="d-block text-truncate">{item.label}</span>
+                {item.meta && <span className="d-block text-muted text-truncate">{item.meta}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Tab ──────────────────────────────────────────────────────────────
 
 interface SettingsTabProps {
   form: ReportForm;
   updateForm: (updater: Partial<ReportForm> | ((prev: ReportForm) => ReportForm)) => void;
   categories: Array<{ id: string; name: string; icon?: string }>;
+  workspaces: Workspace[];
+  datasets: Dataset[];
 }
 
-function SettingsTab({ form, updateForm, categories }: SettingsTabProps) {
+function SettingsTab({ form, updateForm, categories, workspaces, datasets }: SettingsTabProps) {
   const [tagInput, setTagInput] = useState('');
 
   const addTag = () => {
@@ -755,6 +1139,59 @@ function SettingsTab({ form, updateForm, categories }: SettingsTabProps) {
         )}
 
         <div className="row g-3 mb-4">
+          {/* Workspace */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Workspace</label>
+            <select
+              className="form-select"
+              value={form.workspaceId}
+              onChange={(e) =>
+                updateForm({
+                  workspaceId: e.target.value,
+                  datasetId: '',
+                  semanticDimensionFieldIds: [],
+                  semanticMeasureFieldIds: [],
+                  semanticMeasureIds: [],
+                })
+              }
+            >
+              <option value="">No workspace</option>
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}{workspace.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dataset */}
+          <div className="col-md-6">
+            <label className="form-label fw-semibold">Dataset</label>
+            <select
+              className="form-select"
+              value={form.datasetId}
+              onChange={(e) => {
+                const dataset = datasets.find(d => d.id === e.target.value);
+                updateForm({
+                  datasetId: e.target.value,
+                  semanticDimensionFieldIds: [],
+                  semanticMeasureFieldIds: [],
+                  semanticMeasureIds: [],
+                  workspaceId: dataset?.workspaceId || form.workspaceId,
+                  connectionId: dataset?.connectionId || form.connectionId,
+                });
+              }}
+            >
+              <option value="">Direct SQL report</option>
+              {datasets.map((dataset) => (
+                <option key={dataset.id} value={dataset.id}>
+                  {dataset.name}{dataset.isCertified ? ' (certified)' : ''}
+                </option>
+              ))}
+            </select>
+            <div className="form-text">Dataset-backed reports can use curated fields and semantic metadata.</div>
+          </div>
+
           {/* Visibility */}
           <div className="col-md-6">
             <label className="form-label fw-semibold">Visibility</label>

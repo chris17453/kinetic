@@ -567,16 +567,15 @@ function VizRenderer({ visualization, result, visibleColumns, page, pageSize, on
       visualization.type,
     )
   ) {
+    const categoryField = fieldForRole(visualization, 'Category') || (visualization as any).xAxisColumn || (visualization as any).labelColumn;
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).yAxisColumn || (visualization as any).valueColumn;
     return (
       <ChartRenderer
         data={dataProps}
         config={{
           chartType: visualization.type.toLowerCase() as Parameters<typeof ChartRenderer>[0]['config']['chartType'],
-          labelColumn:
-            (visualization as any).xAxisColumn || visibleColumns[0]?.sourceName || '',
-          valueColumns: [
-            (visualization as any).yAxisColumn || visibleColumns[1]?.sourceName || '',
-          ],
+          labelColumn: categoryField || visibleColumns[0]?.sourceName || '',
+          valueColumns: [valueField || visibleColumns[1]?.sourceName || ''],
           title: visualization.title,
           showLegend: visualization.showLegend,
         }}
@@ -585,13 +584,13 @@ function VizRenderer({ visualization, result, visibleColumns, page, pageSize, on
   }
 
   if (visualization.type === 'KpiCard') {
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).valueColumn;
     return (
       <KPIRenderer
         data={dataProps}
         config={{
           label: visualization.title || 'Value',
-          valueColumn:
-            (visualization as any).valueColumn || visibleColumns[0]?.sourceName || '',
+          valueColumn: valueField || visibleColumns[0]?.sourceName || '',
           format: (visualization as any).format,
         }}
       />
@@ -599,13 +598,13 @@ function VizRenderer({ visualization, result, visibleColumns, page, pageSize, on
   }
 
   if (visualization.type === 'Gauge') {
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).valueColumn;
     return (
       <GaugeRenderer
         data={dataProps}
         config={{
           label: visualization.title || 'Value',
-          valueColumn:
-            (visualization as any).valueColumn || visibleColumns[0]?.sourceName || '',
+          valueColumn: valueField || visibleColumns[0]?.sourceName || '',
           min: (visualization as any).min ?? 0,
           max: (visualization as any).max ?? 100,
         }}
@@ -618,6 +617,13 @@ function VizRenderer({ visualization, result, visibleColumns, page, pageSize, on
       <span>Unsupported visualization type: {visualization.type}</span>
     </div>
   );
+}
+
+function fieldForRole(visualization: Report['visualizations'][number], role: string): string | undefined {
+  return visualization.fieldWells
+    ?.filter(well => well.role === role)
+    .sort((a, b) => a.displayOrder - b.displayOrder)[0]
+    ?.field;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

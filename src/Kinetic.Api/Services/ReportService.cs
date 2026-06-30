@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Kinetic.Core.Domain;
 using Kinetic.Core.Domain.Reports;
+using Kinetic.Core.Domain.Workspaces;
 using Kinetic.Data;
 using Kinetic.Adapters.Core;
 
@@ -43,10 +44,15 @@ public class ReportService : IReportService
 
     public async Task<Report?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        return await _db.Reports
-            .Include(r => r.Connection)
-            .Include(r => r.Category)
-            .FirstOrDefaultAsync(r => r.Id == id, ct);
+        var report = await _db.Reports.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (report == null) return null;
+
+        await _db.Entry(report).Reference(r => r.Connection).LoadAsync(ct);
+        await _db.Entry(report).Reference(r => r.Workspace).LoadAsync(ct);
+        await _db.Entry(report).Reference(r => r.Dataset).LoadAsync(ct);
+        await _db.Entry(report).Reference(r => r.Category).LoadAsync(ct);
+
+        return report;
     }
 
     public async Task<IEnumerable<Report>> GetReportsAsync(Guid userId, ReportFilter? filter = null, int page = 1, int pageSize = 25, CancellationToken ct = default)
@@ -58,10 +64,14 @@ public class ReportService : IReportService
 
         var query = _db.Reports
             .Include(r => r.Category)
+            .Include(r => r.Workspace)
+            .Include(r => r.Dataset)
+            .Include(r => r.Connection)
             .Where(r => r.IsActive)
             .Where(r =>
                 (r.OwnerType == OwnerType.User && r.OwnerId == userId) ||
                 (r.OwnerType == OwnerType.Group && userGroupIds.Contains(r.OwnerId)) ||
+                (r.WorkspaceId.HasValue && _db.WorkspaceMembers.Any(m => m.WorkspaceId == r.WorkspaceId.Value && m.UserId == userId && m.IsActive)) ||
                 r.Visibility == Visibility.Public);
 
         // Apply filters
@@ -69,16 +79,38 @@ public class ReportService : IReportService
         {
             if (filter.CategoryId.HasValue)
                 query = query.Where(r => r.CategoryId == filter.CategoryId);
+
+            if (filter.WorkspaceId.HasValue)
+                query = query.Where(r => r.WorkspaceId == filter.WorkspaceId);
+
+            if (filter.DatasetId.HasValue)
+                query = query.Where(r => r.DatasetId == filter.DatasetId);
             
             if (!string.IsNullOrEmpty(filter.Search))
                 query = query.Where(r => r.Name.Contains(filter.Search) || 
                                         (r.Description != null && r.Description.Contains(filter.Search)));
             
-            if (filter.Tags?.Any() == true)
-                query = query.Where(r => r.Tags.Any(t => filter.Tags.Contains(t)));
+            if (!string.IsNullOrWhiteSpace(filter.Visibility) &&
+                Enum.TryParse<Visibility>(filter.Visibility, ignoreCase: true, out var visibility))
+                query = query.Where(r => r.Visibility == visibility);
             
             if (filter.OwnedByMe)
                 query = query.Where(r => r.OwnerType == OwnerType.User && r.OwnerId == userId);
+
+            if (string.Equals(filter.Scope, "my", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.OwnerType == OwnerType.User && r.OwnerId == userId);
+
+            if (string.Equals(filter.Scope, "group", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.OwnerType == OwnerType.Group && userGroupIds.Contains(r.OwnerId));
+
+            if (string.Equals(filter.Scope, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                var favoriteReportIds = await _db.UserFavorites
+                    .Where(f => f.UserId == userId)
+                    .Select(f => f.ReportId)
+                    .ToListAsync(ct);
+                query = query.Where(r => favoriteReportIds.Contains(r.Id));
+            }
             
             if (filter.ConnectionId.HasValue)
                 query = query.Where(r => r.ConnectionId == filter.ConnectionId);
@@ -93,8 +125,19 @@ public class ReportService : IReportService
             }
         }
 
+        if (filter?.Tags?.Any() == true)
+        {
+            var tagFiltered = (await query.ToListAsync(ct))
+                .Where(r => r.Tags.Any(t => filter.Tags.Contains(t, StringComparer.OrdinalIgnoreCase)));
+
+            return ApplySorting(tagFiltered, filter)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+
+        query = ApplySorting(query, filter);
         return await query
-            .OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -107,6 +150,8 @@ public class ReportService : IReportService
             Id = Guid.NewGuid(),
             Name = request.Name,
             Description = request.Description,
+            Slug = await CreateUniqueSlugAsync(request.Name, ct),
+            DatasetId = request.DatasetId,
             ConnectionId = request.ConnectionId,
             QueryText = request.QueryText,
             
@@ -126,8 +171,10 @@ public class ReportService : IReportService
             AutoRun = request.AutoRun,
             CacheMode = request.CacheMode,
             CacheTtlSeconds = request.CacheTtlSeconds,
+            AllowEmbed = request.AllowEmbed,
             
             // Catalog
+            WorkspaceId = request.WorkspaceId,
             CategoryId = request.CategoryId,
             Tags = request.Tags ?? new(),
             
@@ -170,12 +217,15 @@ public class ReportService : IReportService
         if (request.Name != null) report.Name = request.Name;
         if (request.Description != null) report.Description = request.Description;
         if (request.QueryText != null) report.QueryText = request.QueryText;
+        if (request.DatasetId.HasValue) report.DatasetId = request.DatasetId.Value;
         if (request.Parameters != null) report.Parameters = request.Parameters;
         if (request.Columns != null) report.Columns = request.Columns;
         if (request.Visualizations != null) report.Visualizations = request.Visualizations;
         if (request.AutoRun.HasValue) report.AutoRun = request.AutoRun.Value;
         if (request.CacheMode.HasValue) report.CacheMode = request.CacheMode.Value;
         if (request.CacheTtlSeconds.HasValue) report.CacheTtlSeconds = request.CacheTtlSeconds.Value;
+        if (request.AllowEmbed.HasValue) report.AllowEmbed = request.AllowEmbed.Value;
+        if (request.WorkspaceId.HasValue) report.WorkspaceId = request.WorkspaceId.Value;
         if (request.CategoryId.HasValue) report.CategoryId = request.CategoryId.Value;
         if (request.Tags != null) report.Tags = request.Tags;
         if (request.Visibility.HasValue) report.Visibility = request.Visibility.Value;
@@ -215,16 +265,36 @@ public class ReportService : IReportService
             .Where(r =>
                 (r.OwnerType == OwnerType.User && r.OwnerId == userId) ||
                 (r.OwnerType == OwnerType.Group && userGroupIds.Contains(r.OwnerId)) ||
+                (r.WorkspaceId.HasValue && _db.WorkspaceMembers.Any(m => m.WorkspaceId == r.WorkspaceId.Value && m.UserId == userId && m.IsActive)) ||
                 r.Visibility == Visibility.Public);
 
         if (filter != null)
         {
             if (filter.CategoryId.HasValue)
                 query = query.Where(r => r.CategoryId == filter.CategoryId);
+            if (filter.WorkspaceId.HasValue)
+                query = query.Where(r => r.WorkspaceId == filter.WorkspaceId);
+            if (filter.DatasetId.HasValue)
+                query = query.Where(r => r.DatasetId == filter.DatasetId);
             if (!string.IsNullOrEmpty(filter.Search))
                 query = query.Where(r => r.Name.Contains(filter.Search));
             if (filter.OwnedByMe)
                 query = query.Where(r => r.OwnerType == OwnerType.User && r.OwnerId == userId);
+            if (!string.IsNullOrWhiteSpace(filter.Visibility) &&
+                Enum.TryParse<Visibility>(filter.Visibility, ignoreCase: true, out var visibility))
+                query = query.Where(r => r.Visibility == visibility);
+            if (string.Equals(filter.Scope, "my", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.OwnerType == OwnerType.User && r.OwnerId == userId);
+            if (string.Equals(filter.Scope, "group", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.OwnerType == OwnerType.Group && userGroupIds.Contains(r.OwnerId));
+            if (string.Equals(filter.Scope, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                var favoriteReportIds = await _db.UserFavorites
+                    .Where(f => f.UserId == userId)
+                    .Select(f => f.ReportId)
+                    .ToListAsync(ct);
+                query = query.Where(r => favoriteReportIds.Contains(r.Id));
+            }
             
             if (!string.IsNullOrWhiteSpace(filter.Q))
             {
@@ -236,7 +306,59 @@ public class ReportService : IReportService
             }
         }
 
+        if (filter?.Tags?.Any() == true)
+        {
+            var reports = await query.ToListAsync(ct);
+            return reports.Count(r => r.Tags.Any(t => filter.Tags.Contains(t, StringComparer.OrdinalIgnoreCase)));
+        }
+
         return await query.CountAsync(ct);
+    }
+
+    private static IQueryable<Report> ApplySorting(IQueryable<Report> query, ReportFilter? filter)
+    {
+        var descending = filter?.SortDescending ?? true;
+        return filter?.OrderBy?.ToLowerInvariant() switch
+        {
+            "name" => descending
+                ? query.OrderByDescending(r => r.Name)
+                : query.OrderBy(r => r.Name),
+            "popular" => descending
+                ? query.OrderByDescending(r => r.ExecutionCount)
+                : query.OrderBy(r => r.ExecutionCount),
+            "lastrun" or "lastexecutedat" => descending
+                ? query.OrderByDescending(r => r.LastExecutedAt)
+                : query.OrderBy(r => r.LastExecutedAt),
+            "rating" => descending
+                ? query.OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
+                : query.OrderBy(r => r.UpdatedAt ?? r.CreatedAt),
+            "newest" or _ => descending
+                ? query.OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
+                : query.OrderBy(r => r.UpdatedAt ?? r.CreatedAt)
+        };
+    }
+
+    private static IEnumerable<Report> ApplySorting(IEnumerable<Report> reports, ReportFilter? filter)
+    {
+        var descending = filter?.SortDescending ?? true;
+        return filter?.OrderBy?.ToLowerInvariant() switch
+        {
+            "name" => descending
+                ? reports.OrderByDescending(r => r.Name)
+                : reports.OrderBy(r => r.Name),
+            "popular" => descending
+                ? reports.OrderByDescending(r => r.ExecutionCount)
+                : reports.OrderBy(r => r.ExecutionCount),
+            "lastrun" or "lastexecutedat" => descending
+                ? reports.OrderByDescending(r => r.LastExecutedAt)
+                : reports.OrderBy(r => r.LastExecutedAt),
+            "rating" => descending
+                ? reports.OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
+                : reports.OrderBy(r => r.UpdatedAt ?? r.CreatedAt),
+            "newest" or _ => descending
+                ? reports.OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
+                : reports.OrderBy(r => r.UpdatedAt ?? r.CreatedAt)
+        };
     }
 
     public async Task<List<ColumnDefinition>> DetectColumnsAsync(Guid connectionId, string query, CancellationToken ct = default)
@@ -362,17 +484,43 @@ public class ReportService : IReportService
         
         return new ColumnFormat { Type = FormatType.None };
     }
+
+    private async Task<string> CreateUniqueSlugAsync(string name, CancellationToken ct)
+    {
+        var baseSlug = System.Text.RegularExpressions.Regex
+            .Replace(name.Trim().ToLowerInvariant(), "[^a-z0-9]+", "-")
+            .Trim('-');
+
+        if (string.IsNullOrWhiteSpace(baseSlug))
+            baseSlug = "report";
+
+        var slug = baseSlug;
+        var suffix = 2;
+        while (await _db.Reports.AnyAsync(r => r.Slug == slug, ct))
+        {
+            slug = $"{baseSlug}-{suffix}";
+            suffix++;
+        }
+
+        return slug;
+    }
 }
 
 // DTOs
 public class ReportFilter
 {
     public Guid? CategoryId { get; set; }
+    public Guid? WorkspaceId { get; set; }
+    public Guid? DatasetId { get; set; }
     public string? Search { get; set; }
     public List<string>? Tags { get; set; }
     public bool OwnedByMe { get; set; }
     public Guid? ConnectionId { get; set; }
     public string? Q { get; set; }  // full-text search
+    public string? Scope { get; set; }
+    public string? Visibility { get; set; }
+    public string? OrderBy { get; set; }
+    public bool SortDescending { get; set; } = true;
 }
 
 public class CreateReportRequest
@@ -380,6 +528,7 @@ public class CreateReportRequest
     public required string Name { get; set; }
     public string? Description { get; set; }
     public Guid ConnectionId { get; set; }
+    public Guid? DatasetId { get; set; }
     public required string QueryText { get; set; }
     public List<ParameterDefinition>? Parameters { get; set; }
     public List<ColumnDefinition>? Columns { get; set; }
@@ -387,6 +536,8 @@ public class CreateReportRequest
     public bool AutoRun { get; set; }
     public CacheMode CacheMode { get; set; } = CacheMode.None;
     public int? CacheTtlSeconds { get; set; }
+    public bool AllowEmbed { get; set; }
+    public Guid? WorkspaceId { get; set; }
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility Visibility { get; set; } = Visibility.Private;
@@ -398,12 +549,15 @@ public class UpdateReportRequest
     public string? Name { get; set; }
     public string? Description { get; set; }
     public string? QueryText { get; set; }
+    public Guid? DatasetId { get; set; }
     public List<ParameterDefinition>? Parameters { get; set; }
     public List<ColumnDefinition>? Columns { get; set; }
     public List<VisualizationConfig>? Visualizations { get; set; }
     public bool? AutoRun { get; set; }
     public CacheMode? CacheMode { get; set; }
     public int? CacheTtlSeconds { get; set; }
+    public bool? AllowEmbed { get; set; }
+    public Guid? WorkspaceId { get; set; }
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }

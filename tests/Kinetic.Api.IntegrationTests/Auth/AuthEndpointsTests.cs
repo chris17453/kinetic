@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Xunit;
 
@@ -91,6 +93,57 @@ public class AuthEndpointsTests : IClassFixture<KineticWebApplicationFactory>
     }
 
     [Fact]
+    public async Task EntraConfig_ReturnsPublicConfigurationShape()
+    {
+        var response = await _client.GetAsync("/api/auth/entra/config");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("enabled").ValueKind.Should().BeOneOf(JsonValueKind.True, JsonValueKind.False);
+        body.GetProperty("callbackPath").GetString().Should().Be("/api/auth/entra/callback");
+    }
+
+    [Fact]
+    public async Task EntraConfig_WithGlobalIdentityIntegration_ReturnsEnabled()
+    {
+        var registerResponse = await _client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email = $"entra_config_{Guid.NewGuid()}@example.com",
+            password = "Test1234!",
+            displayName = "Entra Config Admin"
+        });
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.Token);
+
+        var integrationResponse = await _client.PostAsJsonAsync("/api/integrations", new
+        {
+            name = "Global Entra",
+            provider = "MicrosoftEntraId",
+            category = "Identity",
+            authMode = "OpenIdConnect",
+            tenantId = "tenant-123",
+            clientId = "client-123",
+            authorityUrl = "https://login.microsoftonline.com/tenant-123",
+            secretReference = "literal:test-secret"
+        });
+        var integrationBody = await integrationResponse.Content.ReadAsStringAsync();
+        integrationResponse.StatusCode.Should().Be(HttpStatusCode.Created, "body: {0}", integrationBody);
+
+        _client.DefaultRequestHeaders.Authorization = null;
+        var response = await _client.GetAsync("/api/auth/entra/config");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        body.GetProperty("source").GetString().Should().Be("integration");
+        body.GetProperty("tenantId").GetString().Should().Be("tenant-123");
+        body.GetProperty("clientId").GetString().Should().Be("client-123");
+        body.GetProperty("authority").GetString().Should().Be("https://login.microsoftonline.com/tenant-123");
+        body.GetProperty("hasClientSecret").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task GetMe_WithValidToken_Returns200()
     {
         var email = $"me_{Guid.NewGuid()}@example.com";
@@ -107,6 +160,134 @@ public class AuthEndpointsTests : IClassFixture<KineticWebApplicationFactory>
         var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task UserProfileEndpoints_UpdatePreferencesPasswordAndSessions()
+    {
+        var email = $"profile_{Guid.NewGuid()}@example.com";
+        var registerResponse = await _client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email,
+            password = "Test1234!",
+            displayName = "Profile User"
+        });
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.Token);
+
+        var updateResponse = await _client.PutAsJsonAsync("/api/users/me", new
+        {
+            displayName = "Profile User Updated",
+            email,
+            timezone = "America/New_York",
+            locale = "en-US",
+            themeMode = "Dark",
+            notifyEmail = true,
+            notifyInApp = false,
+            notifyDigest = true
+        });
+        var updateBody = await updateResponse.Content.ReadAsStringAsync();
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK, "body: {0}", updateBody);
+        using var updatedJson = JsonDocument.Parse(updateBody);
+        updatedJson.RootElement.GetProperty("displayName").GetString().Should().Be("Profile User Updated");
+        updatedJson.RootElement.GetProperty("timezone").GetString().Should().Be("America/New_York");
+        updatedJson.RootElement.GetProperty("themeMode").GetString().Should().Be("Dark");
+        updatedJson.RootElement.GetProperty("preferences").GetProperty("notifyDigest").GetBoolean().Should().BeTrue();
+
+        var groupsResponse = await _client.GetAsync("/api/users/me/groups");
+        groupsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var sessions = await _client.GetFromJsonAsync<JsonElement>("/api/users/me/sessions");
+        var sessionItems = sessions.GetProperty("items").EnumerateArray().ToList();
+        sessionItems.Should().NotBeEmpty();
+        var sessionId = sessionItems[0].GetProperty("id").GetGuid();
+
+        var revokeResponse = await _client.DeleteAsync($"/api/users/me/sessions/{sessionId}");
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var createTokenResponse = await _client.PostAsJsonAsync("/api/users/me/api-tokens", new
+        {
+            name = "Local automation",
+            scopes = new[] { "reports:read" }
+        });
+        var createTokenBody = await createTokenResponse.Content.ReadAsStringAsync();
+        createTokenResponse.StatusCode.Should().Be(HttpStatusCode.Created, "body: {0}", createTokenBody);
+        using var createTokenJson = JsonDocument.Parse(createTokenBody);
+        createTokenJson.RootElement.GetProperty("token").GetString().Should().StartWith("kin_");
+        var apiTokenId = createTokenJson.RootElement.GetProperty("item").GetProperty("id").GetGuid();
+        createTokenJson.RootElement.GetProperty("item").TryGetProperty("tokenHash", out _).Should().BeFalse();
+
+        var apiTokens = await _client.GetFromJsonAsync<JsonElement>("/api/users/me/api-tokens");
+        apiTokens.GetProperty("items").EnumerateArray()
+            .Should().Contain(t => t.GetProperty("id").GetGuid() == apiTokenId &&
+                t.GetProperty("isActive").GetBoolean());
+
+        var revokeTokenResponse = await _client.DeleteAsync($"/api/users/me/api-tokens/{apiTokenId}");
+        revokeTokenResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var createConnectedAccountResponse = await _client.PostAsJsonAsync("/api/users/me/connected-accounts", new
+        {
+            provider = "MicrosoftEntraId",
+            displayName = "Corporate Entra",
+            externalId = "entra-user-123",
+            tenantId = "tenant-123",
+            email,
+            metadata = new Dictionary<string, object?>
+            {
+                ["issuer"] = "https://login.microsoftonline.com/tenant-123"
+            }
+        });
+        var createConnectedAccountBody = await createConnectedAccountResponse.Content.ReadAsStringAsync();
+        createConnectedAccountResponse.StatusCode.Should().Be(HttpStatusCode.Created, "body: {0}", createConnectedAccountBody);
+        using var createConnectedAccountJson = JsonDocument.Parse(createConnectedAccountBody);
+        var connectedAccountId = createConnectedAccountJson.RootElement.GetProperty("id").GetGuid();
+        createConnectedAccountJson.RootElement.GetProperty("provider").GetString().Should().Be("MicrosoftEntraId");
+        createConnectedAccountJson.RootElement.GetProperty("displayName").GetString().Should().Be("Corporate Entra");
+
+        var connectedAccounts = await _client.GetFromJsonAsync<JsonElement>("/api/users/me/connected-accounts");
+        connectedAccounts.GetProperty("items").EnumerateArray()
+            .Should().Contain(a => a.GetProperty("id").GetGuid() == connectedAccountId &&
+                a.GetProperty("isActive").GetBoolean());
+
+        var verifyConnectedAccountResponse = await _client.PostAsync($"/api/users/me/connected-accounts/{connectedAccountId}/verify", null);
+        verifyConnectedAccountResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var verifyConnectedAccountBody = await verifyConnectedAccountResponse.Content.ReadAsStringAsync();
+        using var verifyConnectedAccountJson = JsonDocument.Parse(verifyConnectedAccountBody);
+        verifyConnectedAccountJson.RootElement.GetProperty("lastVerifiedAt").ValueKind.Should().NotBe(JsonValueKind.Null);
+
+        var revokeConnectedAccountResponse = await _client.DeleteAsync($"/api/users/me/connected-accounts/{connectedAccountId}");
+        revokeConnectedAccountResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var badPasswordResponse = await _client.PutAsJsonAsync("/api/users/me/password", new
+        {
+            currentPassword = "Wrong1234!",
+            newPassword = "NewPass123!"
+        });
+        badPasswordResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "Test1234!"
+        });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginAuth = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginAuth!.Token);
+
+        var passwordResponse = await _client.PutAsJsonAsync("/api/users/me/password", new
+        {
+            currentPassword = "Test1234!",
+            newPassword = "NewPass123!"
+        });
+        passwordResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var newLoginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "NewPass123!"
+        });
+        newLoginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
