@@ -9,6 +9,9 @@ import { useAuthStore } from './stores/authStore';
 const LoginPage = lazy(() => import('./pages/Auth/LoginPage').then(m => ({ default: m.LoginPage })));
 const AuthCallbackPage = lazy(() => import('./pages/Auth/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
 const RegisterPage = lazy(() => import('./pages/Auth/RegisterPage').then(m => ({ default: m.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/Auth/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/Auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
+const SetupPage = lazy(() => import('./pages/Setup/SetupPage').then(m => ({ default: m.SetupPage })));
 const DashboardPage = lazy(() => import('./pages/Dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const WorkspacesPage = lazy(() => import('./pages/Workspaces/WorkspacesPage').then(m => ({ default: m.WorkspacesPage })));
 const DatasetsPage = lazy(() => import('./pages/Datasets/DatasetsPage').then(m => ({ default: m.DatasetsPage })));
@@ -29,6 +32,7 @@ const UsersPage = lazy(() => import('./pages/Admin/UsersPage').then(m => ({ defa
 const GroupsPage = lazy(() => import('./pages/Admin/GroupsPage').then(m => ({ default: m.GroupsPage })));
 const AuditPage = lazy(() => import('./pages/Admin/AuditPage').then(m => ({ default: m.AuditPage })));
 const IntegrationsPage = lazy(() => import('./pages/Admin/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })));
+const OrganizationPage = lazy(() => import('./pages/Admin/Organization/OrganizationPage').then(m => ({ default: m.OrganizationPage })));
 const ProfilePage = lazy(() => import('./pages/Profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
 
 const PageLoader = () => (
@@ -58,9 +62,12 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-	                  <Route path="/login" element={<LoginPage />} />
-	                  <Route path="/auth/callback" element={<AuthCallbackPage />} />
-	                  <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/setup" element={<SetupPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/auth/callback" element={<AuthCallbackPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route element={<AppLayout />}>
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
@@ -85,6 +92,7 @@ export default function App() {
                     <Route path="/admin/groups" element={<GroupsPage />} />
                     <Route path="/admin/integrations" element={<IntegrationsPage />} />
                     <Route path="/admin/audit" element={<AuditPage />} />
+                    <Route path="/admin/organization" element={<OrganizationPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

@@ -34,6 +34,11 @@ public class User
     public string? Locale { get; set; }
     public ThemeMode ThemeMode { get; set; } = ThemeMode.System;
 
+    // Password Reset
+    public string? PasswordResetTokenHash { get; set; }
+    public DateTime? PasswordResetTokenExpiresAt { get; set; }
+    public DateTime? PasswordResetRequestedAt { get; set; }
+
     // Audit
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

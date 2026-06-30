@@ -32,9 +32,9 @@ interface UploadedFile {
 
 export function DataUploadPage() {
   const toast = useToast();
-  const [targetMode, setTargetMode] = useState<'new' | 'existing'>('new');
-  const [newDbName, setNewDbName] = useState('');
   const [targetConnectionId, setTargetConnectionId] = useState('');
+  const [createNewDb, setCreateNewDb] = useState(false);
+  const [newDbName, setNewDbName] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [mappingSheet, setMappingSheet] = useState<{
@@ -56,31 +56,47 @@ export function DataUploadPage() {
   });
 
   const analyzeMutation = useMutation({
-    mutationFn: async (files: FileList) => {
+    mutationFn: async (files: File[]) => {
       const formData = new FormData();
-      Array.from(files).forEach((file) => formData.append('files', file));
-      const res = await api.post('/upload/analyze', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      return res.data as { files: Array<{ name: string; sheets: SheetInfo[] }> };
+      files.forEach((file) => formData.append('files', file));
+      
+      const token = localStorage.getItem('kinetic_token');
+      const res = await fetch(
+        (import.meta.env.VITE_API_URL || 'http://localhost:5000/api') + '/upload/analyze',
+        {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(err.error || 'Upload failed');
+      }
+      const result = (await res.json()) as { files: Array<{ name: string; sheets: SheetInfo[] }> };
+      return { result, originalFiles: files };
     },
-    onSuccess: (data) => {
-      const newFiles = data.files.map((f) => ({
-        file: new File([], f.name),
-        sheets: f.sheets,
-        selectedSheets: new Map(
-          f.sheets.map((s) => [
-            s.name,
-            {
-              tableName: s.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-              import: true,
-              columnMappings: new Map(s.columns.map((c) => [c, c])),
-            },
-          ])
-        ),
-      }));
+    onSuccess: ({ result, originalFiles }) => {
+      const newFiles = result.files.map((f) => {
+        // Find the original file by name
+        const originalFile = originalFiles.find((of) => of.name === f.name);
+        return {
+          file: originalFile ?? new File([], f.name),
+          sheets: f.sheets,
+          selectedSheets: new Map(
+            f.sheets.map((s) => [
+              s.name,
+              {
+                tableName: s.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+                import: true,
+                columnMappings: new Map(s.columns.map((c) => [c, c])),
+              },
+            ])
+          ),
+        };
+      });
       setUploadedFiles((prev) => [...prev, ...newFiles]);
-      toast.success('Files analyzed', `${data.files.length} file(s) ready to configure.`);
+      toast.success('Files analyzed', `${result.files.length} file(s) ready to configure.`);
     },
     onError: () => {
       toast.error('Analysis failed', 'Could not read the uploaded files.');
@@ -89,10 +105,10 @@ export function DataUploadPage() {
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        targetMode,
-        newDatabaseName: targetMode === 'new' ? newDbName : undefined,
-        targetConnectionId: targetMode === 'existing' ? targetConnectionId : undefined,
+      const config = {
+        targetConnectionId,
+        createNewDatabase: createNewDb,
+        newDatabaseName: createNewDb ? newDbName : undefined,
         options,
         files: uploadedFiles.map((f) => ({
           fileName: f.file.name,
@@ -105,7 +121,15 @@ export function DataUploadPage() {
             })),
         })),
       };
-      return api.post('/upload/import', payload);
+
+      // Send files + config together so backend has the actual data
+      const formData = new FormData();
+      uploadedFiles.forEach((f) => formData.append('files', f.file));
+      formData.append('config', JSON.stringify(config));
+
+      return api.post('/upload/import-with-data', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
     },
     onSuccess: () => {
       toast.success('Import complete', 'Data has been imported successfully.');
@@ -121,7 +145,7 @@ export function DataUploadPage() {
       e.preventDefault();
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) {
-        analyzeMutation.mutate(e.dataTransfer.files);
+        analyzeMutation.mutate(Array.from(e.dataTransfer.files));
       }
     },
     [analyzeMutation]
@@ -129,7 +153,7 @@ export function DataUploadPage() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      analyzeMutation.mutate(e.target.files);
+      analyzeMutation.mutate(Array.from(e.target.files));
       e.target.value = '';
     }
   };
@@ -154,7 +178,8 @@ export function DataUploadPage() {
   const canImport =
     uploadedFiles.length > 0 &&
     !importMutation.isPending &&
-    (targetMode === 'new' ? newDbName.trim().length > 0 : targetConnectionId.length > 0);
+    targetConnectionId.length > 0 &&
+    (!createNewDb || newDbName.trim().length > 0);
 
   // Find current mapping sheet data
   const mappingData = mappingSheet
@@ -187,56 +212,13 @@ export function DataUploadPage() {
       <div className="card shadow-sm mb-4">
         <div className="card-header bg-white fw-semibold">
           <i className="fa-solid fa-database me-2 text-primary"></i>
-          Target Database
+          Target Connection
         </div>
         <div className="card-body">
-          <div className="d-flex gap-4 mb-3">
-            <div className="form-check">
-              <input
-                type="radio"
-                className="form-check-input"
-                id="mode-new"
-                name="targetMode"
-                checked={targetMode === 'new'}
-                onChange={() => setTargetMode('new')}
-              />
-              <label className="form-check-label" htmlFor="mode-new">
-                Create New Database
-              </label>
-            </div>
-            <div className="form-check">
-              <input
-                type="radio"
-                className="form-check-input"
-                id="mode-existing"
-                name="targetMode"
-                checked={targetMode === 'existing'}
-                onChange={() => setTargetMode('existing')}
-              />
-              <label className="form-check-label" htmlFor="mode-existing">
-                Use Existing Connection
-              </label>
-            </div>
-          </div>
-
-          {targetMode === 'new' ? (
-            <div style={{ maxWidth: 400 }}>
-              <label className="form-label" htmlFor="db-name">
-                Database Name
-              </label>
-              <input
-                id="db-name"
-                type="text"
-                className="form-control"
-                placeholder="my_database"
-                value={newDbName}
-                onChange={(e) => setNewDbName(e.target.value)}
-              />
-            </div>
-          ) : (
-            <div style={{ maxWidth: 400 }}>
+          <div className="row g-3">
+            <div className="col-md-6">
               <label className="form-label" htmlFor="conn-select">
-                Connection
+                Connection <span className="text-danger">*</span>
               </label>
               <select
                 id="conn-select"
@@ -251,8 +233,35 @@ export function DataUploadPage() {
                   </option>
                 ))}
               </select>
+              <div className="form-text">Data will be imported to tables on this server</div>
             </div>
-          )}
+
+            <div className="col-md-6">
+              <div className="form-check mb-2 mt-md-4 pt-md-2">
+                <input
+                  type="checkbox"
+                  className="form-check-input"
+                  id="create-new-db"
+                  checked={createNewDb}
+                  onChange={(e) => setCreateNewDb(e.target.checked)}
+                  disabled={!targetConnectionId}
+                />
+                <label className="form-check-label" htmlFor="create-new-db">
+                  Create a new database on this server
+                </label>
+              </div>
+              {createNewDb && (
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="new_database_name"
+                  value={newDbName}
+                  onChange={(e) => setNewDbName(e.target.value)}
+                  disabled={!targetConnectionId}
+                />
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

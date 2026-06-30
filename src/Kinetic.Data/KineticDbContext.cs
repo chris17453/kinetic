@@ -78,6 +78,9 @@ public class KineticDbContext : DbContext
     // Query Execution
     public DbSet<QueryExecutionLog> QueryExecutionLogs => Set<QueryExecutionLog>();
 
+    // Site Branding
+    public DbSet<SiteBranding> SiteBranding => Set<SiteBranding>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -125,6 +128,9 @@ public class KineticDbContext : DbContext
         // Audit
         ConfigureAuditLog(modelBuilder);
         ConfigureQueryExecutionLog(modelBuilder);
+
+        // Site Branding
+        ConfigureSiteBranding(modelBuilder);
     }
 
     private static ValueComparer<T> JsonValueComparer<T>()
@@ -147,6 +153,7 @@ public class KineticDbContext : DbContext
             entity.Property(e => e.ExternalId).HasMaxLength(256);
             entity.Property(e => e.PasswordHash).HasMaxLength(512);
             entity.Property(e => e.PreferencesJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.PasswordResetTokenHash).HasMaxLength(128);
 	            
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.ExternalId);
@@ -820,6 +827,59 @@ public class KineticDbContext : DbContext
             entity.HasIndex(e => e.ReportId);
             entity.HasIndex(e => e.ConnectionId);
             entity.HasIndex(e => e.ExecutedAt);
+        });
+    }
+
+    private static void ConfigureSiteBranding(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SiteBranding>(entity =>
+        {
+            entity.ToTable("SiteBranding");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.OrgName).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.OrgSlug).HasMaxLength(128).IsRequired();
+
+            entity.Property(e => e.LogoUrl).HasMaxLength(2048);
+            entity.Property(e => e.LogoLightUrl).HasMaxLength(2048);
+            entity.Property(e => e.LogoDarkUrl).HasMaxLength(2048);
+            entity.Property(e => e.FaviconUrl).HasMaxLength(2048);
+            entity.Property(e => e.LoginBackgroundUrl).HasMaxLength(2048);
+            entity.Property(e => e.DashboardBackgroundUrl).HasMaxLength(2048);
+
+            entity.Property(e => e.LogoText).HasMaxLength(256);
+            entity.Property(e => e.LogoTextFont).HasMaxLength(256);
+            entity.Property(e => e.LogoTextSize).HasMaxLength(32);
+            entity.Property(e => e.LogoTextColor).HasMaxLength(32);
+            entity.Property(e => e.LogoTextDarkColor).HasMaxLength(32);
+
+            entity.Property(e => e.PrimaryColor).HasMaxLength(32);
+            entity.Property(e => e.SecondaryColor).HasMaxLength(32);
+            entity.Property(e => e.AccentColor).HasMaxLength(32);
+            entity.Property(e => e.BackgroundColor).HasMaxLength(32);
+            entity.Property(e => e.SurfaceColor).HasMaxLength(32);
+            entity.Property(e => e.TextColor).HasMaxLength(32);
+            entity.Property(e => e.TextMutedColor).HasMaxLength(32);
+            entity.Property(e => e.BorderColor).HasMaxLength(32);
+            entity.Property(e => e.ErrorColor).HasMaxLength(32);
+            entity.Property(e => e.WarningColor).HasMaxLength(32);
+            entity.Property(e => e.SuccessColor).HasMaxLength(32);
+            entity.Property(e => e.InfoColor).HasMaxLength(32);
+            entity.Property(e => e.DarkPrimaryColor).HasMaxLength(32);
+            entity.Property(e => e.DarkSecondaryColor).HasMaxLength(32);
+            entity.Property(e => e.DarkAccentColor).HasMaxLength(32);
+            entity.Property(e => e.DarkBackgroundColor).HasMaxLength(32);
+            entity.Property(e => e.DarkSurfaceColor).HasMaxLength(32);
+            entity.Property(e => e.DarkTextColor).HasMaxLength(32);
+            entity.Property(e => e.DarkTextMutedColor).HasMaxLength(32);
+            entity.Property(e => e.DarkBorderColor).HasMaxLength(32);
+
+            entity.Property(e => e.FontFamily).HasMaxLength(256);
+            entity.Property(e => e.HeadingFontFamily).HasMaxLength(256);
+            entity.Property(e => e.MonoFontFamily).HasMaxLength(256);
+            entity.Property(e => e.CustomCss).HasColumnType("nvarchar(max)");
+
+            entity.HasIndex(e => e.OrgSlug).IsUnique();
         });
     }
 }

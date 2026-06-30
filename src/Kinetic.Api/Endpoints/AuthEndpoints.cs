@@ -58,6 +58,14 @@ public static class AuthEndpoints
         group.MapPost("/logout", Logout)
             .WithName("Logout")
             .RequireAuthorization();
+
+        group.MapPost("/forgot-password", ForgotPassword)
+            .WithName("ForgotPassword")
+            .AllowAnonymous();
+
+        group.MapPost("/reset-password", ResetPassword)
+            .WithName("ResetPassword")
+            .AllowAnonymous();
     }
 
     private static async Task<IResult> Register(
@@ -230,7 +238,7 @@ public static class AuthEndpoints
         HttpContext context,
         EntraIdSettings settings,
         IAuthService authService,
-        IHttpClientFactory httpClientFactory,
+        [FromServices] IHttpClientFactory httpClientFactory,
         KineticDbContext db,
         IConfiguration configuration)
     {
@@ -343,6 +351,32 @@ public static class AuthEndpoints
         context.Response.Cookies.Delete("kinetic_refresh_token");
 
         return Results.Ok();
+    }
+
+    private static async Task<IResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        HttpContext context,
+        IAuthService authService)
+    {
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}";
+        var result = await authService.RequestPasswordResetAsync(request.Email, baseUrl);
+
+        if (!result.Succeeded)
+            return Results.BadRequest(new { error = result.Error });
+
+        return Results.Ok(new { message = result.Message, resetUrl = result.ResetUrl });
+    }
+
+    private static async Task<IResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        IAuthService authService)
+    {
+        var result = await authService.ResetPasswordAsync(request.Email, request.Token, request.NewPassword);
+
+        if (!result.Succeeded)
+            return Results.BadRequest(new { error = result.Error });
+
+        return Results.Ok(new { message = result.Message });
     }
 
     private static void SetAuthCookies(HttpContext context, string accessToken, string refreshToken)

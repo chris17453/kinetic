@@ -61,9 +61,10 @@ export function TableViewerPage() {
     if (!connectionId || !selectedTable) return;
     setPreviewLoading(true);
     try {
+      // Don't add LIMIT to query - backend handles pagination via pageSize
       const res = await api.post('/query/execute', {
         connectionId,
-        query: `SELECT TOP 100 * FROM ${selectedTable}`,
+        query: `SELECT * FROM ${selectedTable}`,
         pageSize: 100,
         page: 1,
       });

@@ -37,6 +37,294 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSetupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/test-database": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/test-rabbitmq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestRabbitMq"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/test-redis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestRedis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/test-smtp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestSmtp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CompleteSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBranding"];
+        put: operations["UpdateBranding"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/slug/{slug}/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBrandingBySlug"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{id}/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBrandingById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetOrgSettings"];
+        put: operations["UpdateOrgSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminGetUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/toggle-active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminToggleUserActive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AdminUpdateUserGroups"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminInviteUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminGetGroups"];
+        put?: never;
+        post: operations["AdminCreateGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AdminUpdateGroup"];
+        post?: never;
+        delete: operations["AdminDeleteGroup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminGetAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/register": {
         parameters: {
             query?: never;
@@ -159,6 +447,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["Logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ForgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ResetPassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1173,6 +1493,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/query/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ValidateQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports": {
         parameters: {
             query?: never;
@@ -1493,6 +1829,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/upload/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AnalyzeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/upload/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImportData"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/upload/import-with-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImportWithData"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/embed/{token}": {
         parameters: {
             query?: never;
@@ -1641,6 +2025,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/export/{reportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Execute and export a report by ID in the specified format */
+        get: operations["ExportByReportId"];
+        put?: never;
+        /** @description Export a report with custom column selection and options */
+        post: operations["ExportByReportIdWithOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/generate-sql": {
         parameters: {
             query?: never;
@@ -1730,9 +2132,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminAccountRequest: {
+            email: string;
+            displayName: string;
+            password: string;
+        };
+        AdminGroupRequest: {
+            name: string;
+            description?: null | string;
+            permissions?: null | string[];
+        };
         AiExplainQueryRequest: {
             sql?: string;
             databaseType?: string;
+        };
+        BrandingDto: {
+            id?: string;
+            organizationId?: string;
+            orgName?: string;
+            orgSlug?: string;
+            logoUrl?: null | string;
+            logoLightUrl?: null | string;
+            logoDarkUrl?: null | string;
+            faviconUrl?: null | string;
+            loginBackgroundUrl?: null | string;
+            dashboardBackgroundUrl?: null | string;
+            useTextLogo?: boolean;
+            logoText?: null | string;
+            logoTextFont?: null | string;
+            logoTextSize?: null | string;
+            logoTextColor?: null | string;
+            logoTextDarkColor?: null | string;
+            primaryColor?: string;
+            secondaryColor?: string;
+            accentColor?: string;
+            backgroundColor?: string;
+            surfaceColor?: string;
+            textColor?: string;
+            textMutedColor?: string;
+            borderColor?: string;
+            errorColor?: string;
+            warningColor?: string;
+            successColor?: string;
+            infoColor?: string;
+            darkPrimaryColor?: string;
+            darkSecondaryColor?: string;
+            darkAccentColor?: string;
+            darkBackgroundColor?: string;
+            darkSurfaceColor?: string;
+            darkTextColor?: string;
+            darkTextMutedColor?: string;
+            darkBorderColor?: string;
+            fontFamily?: string;
+            headingFontFamily?: string;
+            monoFontFamily?: string;
+            customCss?: null | string;
+            allowLocalUsers?: boolean;
+            allowEntraId?: boolean;
+            requireMfa?: boolean;
         };
         BuildDatasetQueryRequest: {
             dimensionFieldIds?: string[];
@@ -1788,6 +2245,16 @@ export interface components {
         CompleteRefreshJobRequest: {
             status?: components["schemas"]["RefreshJobStatus"];
             message?: null | string;
+        };
+        CompleteSetupRequest: {
+            databaseConnectionString: string;
+            rabbitMqConnectionString: string;
+            redisConnectionString: string;
+            encryptionKey: string;
+            adminEmail: string;
+            adminDisplayName: string;
+            adminPassword: string;
+            smtp?: null | components["schemas"]["SmtpConfiguration"];
         };
         /** @enum {unknown} */
         ConnectedAccountProvider: "MicrosoftEntraId" | "AzureDevOps" | "Azure" | "OpenIdConnect" | "Saml" | "ServicePrincipal" | "Custom";
@@ -2085,6 +2552,11 @@ export interface components {
             /** Format: int64 */
             executionTimeMs?: number | string;
         };
+        ExportByReportRequest: {
+            format?: null | string;
+            columns?: null | string[];
+            options?: null | components["schemas"]["ExportOptionsDto"];
+        };
         ExportColumnDto: {
             name?: string;
             displayName?: null | string;
@@ -2128,6 +2600,9 @@ export interface components {
             entityTag?: null | components["schemas"]["EntityTagHeaderValue"];
             enableRangeProcessing?: boolean;
         };
+        ForgotPasswordRequest: {
+            email: string;
+        };
         /** @enum {unknown} */
         FormatType: "None" | "Number" | "Currency" | "Percent" | "Date" | "DateTime" | "Time" | "Custom";
         GaugeThreshold: {
@@ -2148,6 +2623,29 @@ export interface components {
         };
         /** @enum {unknown} */
         GroupRole: "Member" | "Manager" | "Owner";
+        ImportFileRequest: {
+            fileName?: string;
+            sheets?: components["schemas"]["ImportSheetRequest"][];
+        };
+        ImportOptions: {
+            firstRowHeaders?: boolean;
+            autoDetectTypes?: boolean;
+            truncateExisting?: boolean;
+        };
+        ImportRequest: {
+            targetConnectionId?: string;
+            createNewDatabase?: boolean;
+            newDatabaseName?: null | string;
+            options?: components["schemas"]["ImportOptions"];
+            files?: components["schemas"]["ImportFileRequest"][];
+        };
+        ImportSheetRequest: {
+            sheetName?: string;
+            tableName?: string;
+            columnMappings?: {
+                [key: string]: string;
+            };
+        };
         IngestedDatasetDto: {
             id: string;
             name: string;
@@ -2212,6 +2710,10 @@ export interface components {
             clientId?: null | string;
             authorityUrl?: null | string;
             isEnabled?: null | boolean;
+        };
+        InviteUserRequest: {
+            email: string;
+            role?: null | string;
         };
         LoginRequest: {
             email: string;
@@ -2327,6 +2829,11 @@ export interface components {
             trends?: string[];
             recommendations?: string[];
         };
+        ResetPasswordRequest: {
+            email: string;
+            token: string;
+            newPassword: string;
+        };
         ScheduleReportRequest: {
             parameters?: null | Record<string, never>;
             /** Format: date-time */
@@ -2357,6 +2864,47 @@ export interface components {
             toFieldId?: string;
             cardinality?: string;
             isActive?: boolean;
+        };
+        SettingsDto: {
+            allowLocalUsers?: boolean;
+            allowEntraId?: boolean;
+            requireMfa?: boolean;
+            /** Format: int32 */
+            sessionTimeoutMinutes?: number | string;
+            enableDataUpload?: boolean;
+            enableQueryPlayground?: boolean;
+            enableReportBuilder?: boolean;
+            enableAiAssistant?: boolean;
+            enableExportPdf?: boolean;
+            enableExportExcel?: boolean;
+            enableEmbedding?: boolean;
+            /** Format: int32 */
+            maxConnectionsPerGroup?: number | string;
+            /** Format: int32 */
+            maxReportsPerGroup?: number | string;
+            /** Format: int32 */
+            maxQueryResultRows?: number | string;
+            /** Format: int32 */
+            maxUploadSizeMb?: number | string;
+            /** Format: int32 */
+            tempDataRetentionHours?: number | string;
+            defaultCanCreateReports?: boolean;
+            defaultCanCreateConnections?: boolean;
+            defaultCanUploadData?: boolean;
+            defaultCanExport?: boolean;
+        };
+        SetupTestConnectionRequest: {
+            connectionString: string;
+        };
+        SmtpConfiguration: {
+            host: string;
+            /** Format: int32 */
+            port: number | string;
+            useSsl: boolean;
+            username: string;
+            password: string;
+            fromAddress: string;
+            fromName: string;
         };
         /** @enum {unknown} */
         SortDirection: "Ascending" | "Descending" | null;
@@ -2462,6 +3010,9 @@ export interface components {
         UpdateRoleRequest: {
             role: components["schemas"]["GroupRole"];
         };
+        UpdateUserGroupsRequest: {
+            groupIds: string[];
+        };
         UpdateUserRequest: {
             email?: null | string;
             displayName?: null | string;
@@ -2477,6 +3028,11 @@ export interface components {
             color?: null | string;
             visibility?: null | components["schemas"]["Visibility"];
             isDefault?: null | boolean;
+        };
+        ValidateQueryRequest: {
+            /** Format: uuid */
+            connectionId: string;
+            sql: string;
         };
         /** @enum {unknown} */
         Visibility: "Private" | "Group" | "Department" | "Public" | null;
@@ -2884,6 +3440,471 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetSetupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupTestConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestRabbitMq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupTestConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestRedis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupTestConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestSmtp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SmtpConfiguration"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CompleteSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteSetupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CreateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandingDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBrandingBySlug: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBrandingById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetOrgSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateOrgSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminGetUsers: {
+        parameters: {
+            query?: {
+                search?: string;
+                pageSize?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminToggleUserActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminUpdateUserGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserGroupsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminInviteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteUserRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminGetGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminCreateGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminUpdateGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminDeleteGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminGetAuditLogs: {
+        parameters: {
+            query?: {
+                action?: string;
+                entityType?: string;
+                startDate?: string;
+                endDate?: string;
+                pageSize?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     Register: {
         parameters: {
             query?: never;
@@ -3037,6 +4058,50 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ForgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ResetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -3518,9 +4583,9 @@ export interface operations {
     };
     GetGroups: {
         parameters: {
-            query: {
-                page: number | string;
-                pageSize: number | string;
+            query?: {
+                page?: number | string;
+                pageSize?: number | string;
             };
             header?: never;
             path?: never;
@@ -5126,6 +6191,28 @@ export interface operations {
             };
         };
     };
+    ValidateQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetReports: {
         parameters: {
             query?: {
@@ -5707,6 +6794,64 @@ export interface operations {
             };
         };
     };
+    AnalyzeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ImportData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ImportWithData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetEmbeddedReport: {
         parameters: {
             query?: never;
@@ -5994,6 +7139,52 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StreamCsvExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ExportByReportId: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                reportId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ExportByReportIdWithOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reportId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportByReportRequest"];
             };
         };
         responses: {

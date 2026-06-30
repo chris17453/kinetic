@@ -14,6 +14,7 @@ const connectionTypes: { value: ConnectionType; label: string }[] = [
   { value: 'MySQL', label: 'MySQL' },
   { value: 'SQLite', label: 'SQLite' },
   { value: 'Oracle', label: 'Oracle' },
+  { value: 'MongoDB', label: 'MongoDB' },
   { value: 'ClickHouse', label: 'ClickHouse' },
   { value: 'Snowflake', label: 'Snowflake' },
   { value: 'BigQuery', label: 'BigQuery' },
@@ -30,7 +31,7 @@ const visibilityOptions: { value: Visibility; label: string }[] = [
 const connectionFormSchema = z.object({
   name: z.string().min(1, 'Name is required').min(3, 'Name must be at least 3 characters'),
   description: z.string(),
-  type: z.enum(['SqlServer', 'PostgreSQL', 'MySQL', 'SQLite', 'Oracle', 'DuckDB', 'ClickHouse', 'Snowflake', 'BigQuery', 'Custom']),
+  type: z.enum(['SqlServer', 'PostgreSQL', 'MySQL', 'SQLite', 'Oracle', 'MongoDB', 'ClickHouse', 'Snowflake', 'BigQuery', 'Custom']),
   connectionString: z.string(),
   workspaceId: z.string(),
   visibility: z.enum(['Private', 'Group', 'Department', 'Public']),

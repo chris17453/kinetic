@@ -37,6 +37,7 @@ Thumbs.db
 !.env.example
 appsettings.*.json
 !appsettings.Development.json.example
+kinetic.config.json
 
 # Logs
 logs/

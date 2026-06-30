@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useBrandingStore } from '../../stores/brandingStore';
 import { SearchModal } from '../common/SearchModal';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 
@@ -23,6 +24,7 @@ const adminItems = [
   { name: 'Groups', href: '/admin/groups', icon: 'fa-user-group' },
   { name: 'Integrations', href: '/admin/integrations', icon: 'fa-plug-circle-bolt' },
   { name: 'Audit Log', href: '/admin/audit', icon: 'fa-clipboard-list' },
+  { name: 'Organization', href: '/admin/organization', icon: 'fa-building' },
 ];
 
 // Page title map for document.title
@@ -42,6 +44,7 @@ const pageTitles: Record<string, string> = {
   '/admin/groups': 'Groups',
   '/admin/integrations': 'Integrations',
   '/admin/audit': 'Audit Log',
+  '/admin/organization': 'Organization',
   '/profile': 'My Profile',
 };
 
@@ -49,14 +52,16 @@ export function AppLayout() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
+  const { branding, toggleDarkMode } = useBrandingStore();
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('kinetic-theme') === 'dark');
   const hasStoredToken = Boolean(localStorage.getItem('kinetic_token'));
 
   // Set document title
   useEffect(() => {
+    const appName = branding?.orgName || 'Kinetic';
     const base = pageTitles[location.pathname];
-    document.title = base ? `${base} — Kinetic` : 'Kinetic';
-  }, [location.pathname]);
+    document.title = base ? `${base} — ${appName}` : appName;
+  }, [location.pathname, branding?.orgName]);
 
   // Dark mode
   useEffect(() => {
@@ -99,8 +104,26 @@ export function AppLayout() {
       <aside className="kinetic-sidebar">
         {/* Logo */}
         <div className="p-3 border-bottom d-flex align-items-center gap-2">
-          <img src="/favicon.png" alt="" width={32} height={32} style={{ borderRadius: 6 }} />
-          <img src="/logo-full.png" alt="Kinetic" height={28} style={{ maxWidth: 120, objectFit: 'contain' }} />
+          {branding?.faviconUrl ? (
+            <img src={branding.faviconUrl} alt="" width={32} height={32} style={{ borderRadius: 6 }} />
+          ) : (
+            <img src="/favicon.png" alt="" width={32} height={32} style={{ borderRadius: 6 }} />
+          )}
+          {branding?.useTextLogo ? (
+            <span style={{
+              fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+              fontSize: branding.logoTextSize || '1.5rem',
+              color: darkMode ? (branding.logoTextDarkColor || '#60A5FA') : (branding.logoTextColor || '#3B82F6'),
+              fontWeight: 700,
+              lineHeight: 1,
+            }}>
+              {branding.logoText || branding.orgName || 'Kinetic'}
+            </span>
+          ) : branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={branding.orgName || 'Kinetic'} height={28} style={{ maxWidth: 120, objectFit: 'contain' }} />
+          ) : (
+            <img src="/logo-full.png" alt="Kinetic" height={28} style={{ maxWidth: 120, objectFit: 'contain' }} />
+          )}
         </div>
 
         {/* Search shortcut */}
@@ -175,7 +198,7 @@ export function AppLayout() {
             </Link>
             <button
               className="btn btn-light btn-sm"
-              onClick={() => setDarkMode(d => !d)}
+              onClick={() => { setDarkMode(d => !d); toggleDarkMode(); }}
               title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               <i className={`fa-solid ${darkMode ? 'fa-sun' : 'fa-moon'}`}></i>
@@ -191,8 +214,23 @@ export function AppLayout() {
       <div className="offcanvas offcanvas-start d-lg-none" tabIndex={-1} id="mobileSidebar" style={{ width: 260 }}>
         <div className="offcanvas-header border-bottom">
           <div className="d-flex align-items-center gap-2">
-            <img src="/logo.svg" alt="Kinetic" width={28} height={28} />
-            <span className="fw-bold fs-5 text-primary">Kinetic</span>
+            {branding?.useTextLogo ? (
+              <span style={{
+                fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                fontSize: branding.logoTextSize || '1.5rem',
+                color: branding.logoTextColor || '#3B82F6',
+                fontWeight: 700,
+              }}>
+                {branding.logoText || branding.orgName || 'Kinetic'}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.orgName || 'Kinetic'} height={28} />
+            ) : (
+              <>
+                <img src="/logo.svg" alt="Kinetic" width={28} height={28} />
+                <span className="fw-bold fs-5 text-primary">Kinetic</span>
+              </>
+            )}
           </div>
           <button type="button" className="btn-close" data-bs-dismiss="offcanvas" />
         </div>
