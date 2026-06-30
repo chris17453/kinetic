@@ -6,6 +6,7 @@
     <Project Path="src/Kinetic.Data/Kinetic.Data.csproj" />
     <Project Path="src/Kinetic.Identity/Kinetic.Identity.csproj" />
     <Project Path="src/Kinetic.Ingest/Kinetic.Ingest.csproj" />
+    <Project Path="src/Kinetic.Mcp/Kinetic.Mcp.csproj" />
     <Project Path="src/Kinetic.Queue/Kinetic.Queue.csproj" />
     <Project Path="src/Kinetic.Store/Kinetic.Store.csproj" />
     <Project Path="src/Kinetic.Worker/Kinetic.Worker.csproj" />

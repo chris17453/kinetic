@@ -64,6 +64,30 @@ npm run dev
 
 The UI starts on `http://localhost:5173`. On first load it checks `GET /api/setup/status` and redirects to the **Setup Wizard** at `/setup`.
 
+## 3a. Run the MCP Server (optional)
+
+The MCP server exposes direct data access tools over stdio for MCP clients. It reuses the same database connections, query execution pipeline, and Kinetic API tokens as the app.
+
+Create an API token from Profile -> API Tokens, then launch the server:
+
+```bash
+KINETIC_MCP_API_TOKEN="kin_..." make mcp
+```
+
+Available tools:
+
+| Tool | Purpose |
+|------|---------|
+| `kinetic_list_connections` | Lists connections visible to the token's user |
+| `kinetic_query` | Runs SQL or adapter-specific query text against an accessible connection |
+| `kinetic_execute_report` | Executes an accessible saved report |
+
+Run the protocol smoke test with:
+
+```bash
+make test-mcp
+```
+
 ## 4. Walk Through the Setup Wizard
 
 The wizard has 6 steps:

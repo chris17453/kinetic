@@ -19,6 +19,7 @@ DEV_USER_NAME ?= Local Dev
 
 API_PROJECT := src/Kinetic.Api/Kinetic.Api.csproj
 DATA_PROJECT := src/Kinetic.Data
+MCP_PROJECT := src/Kinetic.Mcp/Kinetic.Mcp.csproj
 UI_DIR := ui
 SOLUTION := Kinetic.slnx
 
@@ -33,7 +34,7 @@ API_ENV := \
 	Jwt__Issuer="$(JWT_ISSUER)" \
 	Jwt__Audience="$(JWT_AUDIENCE)"
 
-.PHONY: help dev launch dbs infra infra-tools sample-dbs observability wait-dbs wait-infra migrate api ui dev-user install build test test-contract test-e2e test-all stop down status
+.PHONY: help dev launch dbs infra infra-tools sample-dbs observability wait-dbs wait-infra migrate api mcp ui dev-user install build test test-contract test-mcp test-e2e test-all stop down status
 
 help:
 	@printf "Kinetic local development\n\n"
@@ -42,11 +43,13 @@ help:
 	printf "  make dbs            Start Docker SQL Server and Redis only\n"
 	printf "  make migrate        Apply EF Core migrations to the local database\n"
 	printf "  make api            Run the .NET API on %s\n" "$(API_URL)"
+	printf "  make mcp            Run the Kinetic MCP stdio server\n"
 	printf "  make ui             Run the Vite UI on %s\n" "$(UI_URL)"
 	printf "  make dev-user       Create/check the local dev login\n"
 	printf "  make build          Build backend and frontend\n"
 	printf "  make test           Run backend integration tests and frontend tests\n"
 	printf "  make test-contract  Check generated frontend API DTOs against OpenAPI\n"
+	printf "  make test-mcp       Run an MCP stdio handshake/tool-list smoke test\n"
 	printf "  make test-e2e       Run Playwright smoke tests against local API + UI\n"
 	printf "  make test-all       Run test, contract, and E2E checks\n"
 	printf "  make stop           Stop Docker services\n"
@@ -107,6 +110,9 @@ migrate:
 api:
 	$(API_ENV) dotnet run --project "$(API_PROJECT)" --no-launch-profile
 
+mcp:
+	$(API_ENV) dotnet run --project "$(MCP_PROJECT)" --no-launch-profile
+
 ui:
 	cd "$(UI_DIR)"
 	npm run dev -- --host 0.0.0.0 --port "$(UI_PORT)" --strictPort
@@ -162,11 +168,22 @@ test-contract: dbs wait-dbs migrate
 	cd "$(UI_DIR)"
 	KINETIC_OPENAPI_URL="$(API_URL)/openapi/v1.json" npm run api:types:check
 
+test-mcp:
+	@frame() { local message="$$1"; printf 'Content-Length: %s\r\n\r\n%s' "$${#message}" "$$message"; }
+	response="$$( { \
+		frame '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+		frame '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+		frame '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"kinetic_list_connections","arguments":{}}}'
+		} | $(API_ENV) dotnet run --project "$(MCP_PROJECT)" --no-launch-profile)"
+	printf '%s\n' "$$response"
+	printf '%s' "$$response" | grep -q '"name":"kinetic_query"'
+	printf '%s' "$$response" | grep -q 'KINETIC_MCP_API_TOKEN'
+
 test-e2e:
 	cd tests/Kinetic.E2E
 	BASE_URL="$(UI_URL)" API_URL="$(API_URL)" npm test -- --project=chromium
 
-test-all: test test-contract test-e2e
+test-all: test test-contract test-mcp test-e2e
 
 stop:
 	docker compose stop
