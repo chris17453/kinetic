@@ -6,7 +6,7 @@ import type { User, Group } from '../../lib/api/types';
 import { useToast, Breadcrumb } from '../../components/common';
 
 const BREADCRUMBS = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Home', path: '/' },
   { label: 'Admin' },
   { label: 'Users' },
 ];

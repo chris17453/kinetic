@@ -122,7 +122,7 @@ public static class SetupEndpoints
         // In production, only allow when no users exist (first admin).
         // In development, always allow (enables password reset during dev).
         var status = setupService.GetStatus();
-        if (!environment.IsDevelopment() && !status.NeedsAdmin)
+        if (!environment.IsDevelopment() && !environment.IsEnvironment("Test") && !environment.IsEnvironment("Testing") && !status.NeedsAdmin)
             return Results.NotFound(new { error = "Admin account already exists." });
 
         await setupService.CreateAdminAsync(connectionString, request);

@@ -4,8 +4,18 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { Report, ParameterDefinition } from '../../lib/api/types';
 import { ParameterInputs } from '../../components/parameters';
-import { TableRenderer, ChartRenderer, KPIRenderer, GaugeRenderer } from '../../components/visualizations';
+import {
+  TableRenderer,
+  ChartRenderer,
+  KPIRenderer,
+  GaugeRenderer,
+  RadarRenderer,
+  FunnelRenderer,
+  HeatmapRenderer,
+  WaterfallRenderer,
+} from '../../components/visualizations';
 import { Breadcrumb, useToast } from '../../components/common';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface ExecutionResult {
   columns: Array<{ name: string; dataType: string }>;
@@ -30,6 +40,7 @@ export function ReportViewerPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
+  const { canManageReports } = usePermissions();
 
   const [activeViz, setActiveViz] = useState<string | null>(null);
   const [paramValues, setParamValues] = useState<Record<string, unknown>>({});
@@ -38,6 +49,7 @@ export function ReportViewerPage() {
   const [paramPanelOpen, setParamPanelOpen] = useState(true);
   const [fullscreenVizId, setFullscreenVizId] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>('off');
+  const manualAutoRunRef = useRef<string | null>(null);
 
   // Auto-refresh
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -169,8 +181,16 @@ export function ReportViewerPage() {
   const isManualNoData =
     report?.executionMode === 'Manual' && !executeMutation.data && !executeMutation.isPending;
 
+  useEffect(() => {
+    if (!report || hasParameters || report.executionMode !== 'Manual') return;
+    if (executeMutation.data || executeMutation.isPending) return;
+    if (manualAutoRunRef.current === report.id) return;
+    manualAutoRunRef.current = report.id;
+    handleExecute();
+  }, [report?.id, report?.executionMode, hasParameters, executeMutation.data, executeMutation.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const breadcrumbs = [
-    { label: 'Dashboard', path: '/' },
+    { label: 'Home', path: '/' },
     { label: 'Reports', path: '/catalog' },
     { label: report?.name || 'Report' },
   ];
@@ -204,21 +224,53 @@ export function ReportViewerPage() {
     );
   }
 
+  const metaBadges = [
+    report.category?.name ? { label: report.category.name, tone: 'text-bg-light border', to: undefined } : null,
+    report.dataset?.name ? { label: report.dataset.name, tone: 'text-bg-light border', to: report.dataset.id ? `/datasets/${report.dataset.id}` : undefined } : null,
+    report.workspaceName && report.workspaceId ? { label: report.workspaceName, tone: 'text-bg-light border', to: `/workspaces/${report.workspaceId}` } : null,
+    report.isFeatured ? { label: 'Featured', tone: 'text-bg-primary' } : null,
+    report.averageRating ? { label: `${report.averageRating.toFixed(1)} rating`, tone: 'text-bg-warning text-dark' } : null,
+    report.lastExecutedAt ? { label: `Executed ${formatRelativeTime(report.lastExecutedAt)}`, tone: 'text-bg-light border' } : null,
+  ].filter(Boolean) as Array<{ label: string; tone: string; to?: string }>;
+
   return (
-    <div className="d-flex flex-column" style={{ height: 'calc(100vh - 8rem)' }}>
+    <div className="d-flex flex-column" style={{ minHeight: 'calc(100vh - 8rem)' }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="card border-0 shadow-sm mb-3">
         <div className="card-body py-2 px-3">
           <Breadcrumb crumbs={breadcrumbs} />
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <div className="flex-grow-1">
+          <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+            <div>
               <h4 className="fw-bold mb-0">{report.name}</h4>
-              {report.description && (
-                <p className="text-muted small mb-0 mt-1">{report.description}</p>
-              )}
+              {report.description && <p className="text-muted small mb-0 mt-1">{report.description}</p>}
             </div>
-
-            {/* Auto-refresh selector */}
+            <div className="d-flex gap-2 flex-wrap justify-content-end">
+              {report.allowEmbed && <span className="badge text-bg-primary">Embeddable</span>}
+              <span className="badge text-bg-light border">{report.executionMode}</span>
+              {report.cacheMode === 'TempDb' ? <span className="badge text-bg-info">Cached</span> : <span className="badge text-bg-secondary">Live</span>}
+            </div>
+          </div>
+          <div className="d-flex flex-wrap gap-2 mt-2">
+            {report.workspaceId && <Link to={`/workspaces/${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Open workspace</Link>}
+            {report.dataset?.id && <Link to={`/datasets/${report.dataset.id}`} className="btn btn-outline-secondary btn-sm">Open dataset</Link>}
+            {report.workspaceId && <Link to={`/dashboards?workspaceId=${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Workspace dashboards</Link>}
+          </div>
+          {metaBadges.length > 0 && (
+            <div className="d-flex flex-wrap gap-2 mt-2">
+              {metaBadges.map((badge) => (
+                badge.to ? (
+                  <Link key={badge.label} to={badge.to} className={`badge ${badge.tone} text-decoration-none`}>
+                    {badge.label}
+                  </Link>
+                ) : (
+                  <span key={badge.label} className={`badge ${badge.tone}`}>
+                    {badge.label}
+                  </span>
+                )
+              ))}
+            </div>
+          )}
+          <div className="d-flex align-items-center gap-2 flex-wrap mt-2">
             <div className="input-group input-group-sm" style={{ width: 'auto' }}>
               <label className="input-group-text text-muted" htmlFor="autoRefresh">
                 <i className="fa-solid fa-rotate me-1"></i>
@@ -239,7 +291,6 @@ export function ReportViewerPage() {
               </select>
             </div>
 
-            {/* Export dropdown */}
             <div className="dropdown">
               <button
                 className="btn btn-outline-secondary btn-sm dropdown-toggle"
@@ -278,23 +329,128 @@ export function ReportViewerPage() {
               </ul>
             </div>
 
-            {/* Copy link */}
             <button className="btn btn-outline-secondary btn-sm" onClick={handleCopyLink}>
               <i className="fa-solid fa-link me-1"></i>
               Copy link
             </button>
 
-            {/* Edit */}
-            <Link to={`/reports/${id}/edit`} className="btn btn-outline-primary btn-sm">
-              <i className="fa-solid fa-pencil me-1"></i>
-              Edit
-            </Link>
+            {canManageReports && (
+              <Link to={`/reports/${id}/edit`} className="btn btn-outline-primary btn-sm">
+                <i className="fa-solid fa-pencil me-1"></i>
+                Edit
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
+      <details className="card border-0 shadow-sm mb-3">
+        <summary className="card-header bg-white py-2 px-3 fw-semibold" style={{ cursor: 'pointer' }}>
+          Report details
+          <span className="text-muted small fw-normal ms-2">Workspace, dataset, governance, and signals</span>
+        </summary>
+        <div className="card-body pt-2">
+          <div className="row g-3">
+            <div className="col-lg-8">
+              <div className="row g-3">
+                <div className="col-md-4">
+                  <div className="border rounded-3 p-3 bg-light h-100">
+                    <div className="text-muted small text-uppercase fw-semibold">Workspace</div>
+                    {report.workspaceId ? (
+                      <Link to={`/workspaces/${report.workspaceId}`} className="fw-semibold text-decoration-none d-block mt-1">
+                        {report.workspaceName || 'Open workspace'}
+                      </Link>
+                    ) : (
+                      <div className="fw-semibold mt-1">No workspace</div>
+                    )}
+                    <div className="text-muted small">Where this report lives.</div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="border rounded-3 p-3 bg-light h-100">
+                    <div className="text-muted small text-uppercase fw-semibold">Dataset</div>
+                    {report.dataset?.id ? (
+                      <Link to={`/datasets/${report.dataset.id}`} className="fw-semibold text-decoration-none d-block mt-1">
+                        {report.dataset.name}
+                      </Link>
+                    ) : (
+                      <div className="fw-semibold mt-1">No dataset</div>
+                    )}
+                    <div className="text-muted small">Semantic source and model.</div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="border rounded-3 p-3 bg-light h-100">
+                    <div className="text-muted small text-uppercase fw-semibold">Governance</div>
+                    {report.category?.id ? (
+                      <span className="fw-semibold d-block mt-1">{report.category.name}</span>
+                    ) : (
+                      <span className="fw-semibold d-block mt-1">Uncategorized</span>
+                    )}
+                    <div className="text-muted small">Category, rating, and sharing metadata.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="d-flex flex-wrap gap-2 mt-3">
+                {report.workspaceId && (
+                  <Link to={`/workspaces/${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Open workspace</Link>
+                )}
+                {report.dataset?.id && (
+                  <Link to={`/datasets/${report.dataset.id}`} className="btn btn-outline-secondary btn-sm">Open dataset</Link>
+                )}
+                {report.category?.id && (
+                  <Link to={`/catalog?categoryId=${report.category.id}`} className="btn btn-outline-secondary btn-sm">Browse category</Link>
+                )}
+                {report.workspaceId && (
+                  <Link to={`/dashboards?workspaceId=${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Workspace dashboards</Link>
+                )}
+              </div>
+            </div>
+            <div className="col-lg-4">
+              <div className="border rounded-3 p-3 bg-light h-100">
+                <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Report signals</div>
+                <div className="row g-2 mt-1">
+                  <div className="col-6">
+                    <div className="border rounded-3 p-2 bg-white text-center">
+                      <div className="fw-bold">{report.visualizations?.length ?? 0}</div>
+                      <div className="text-muted small">Visuals</div>
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="border rounded-3 p-2 bg-white text-center">
+                      <div className="fw-bold">{visibleColumns.length}</div>
+                      <div className="text-muted small">Columns</div>
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="border rounded-3 p-2 bg-white text-center">
+                      <div className="fw-bold">{report.executionCount}</div>
+                      <div className="text-muted small">Runs</div>
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="border rounded-3 p-2 bg-white text-center">
+                      <div className="fw-bold">{report.ratingCount ?? 0}</div>
+                      <div className="text-muted small">Ratings</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="small text-uppercase fw-semibold text-muted mb-2">Tags</div>
+                  <div className="d-flex flex-wrap gap-2">
+                    {report.tags?.length ? report.tags.map(tag => (
+                      <Link key={tag} to={`/catalog?tag=${encodeURIComponent(tag)}`} className="badge text-bg-light border text-decoration-none">{tag}</Link>
+                    )) : <div className="text-muted small">No tags yet.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
       {/* ── Body ────────────────────────────────────────────────────────── */}
-      <div className="d-flex flex-grow-1 gap-3 overflow-hidden">
+      <div className="d-flex flex-column flex-lg-row gap-3">
         {/* ── Parameter Panel ─────────────────────────────────────────── */}
         {hasParameters && (
           <div
@@ -352,7 +508,7 @@ export function ReportViewerPage() {
         )}
 
         {/* ── Main Visualization Area ──────────────────────────────────── */}
-        <div className="d-flex flex-column flex-grow-1 overflow-hidden" style={{ minWidth: 0 }}>
+        <div className="d-flex flex-column flex-grow-1" style={{ minWidth: 0 }}>
           {/* No-parameter manual run prompt */}
           {!hasParameters && isManualNoData && (
             <div className="card border-0 shadow-sm mb-3">
@@ -371,25 +527,36 @@ export function ReportViewerPage() {
 
           {/* Viz Tabs */}
           {(report.visualizations?.length ?? 0) > 1 && (
-            <ul className="nav nav-tabs mb-2 flex-shrink-0">
-              {report.visualizations.map((viz) => (
-                <li className="nav-item" key={viz.id}>
-                  <button
-                    className={`nav-link ${activeViz === viz.id ? 'active' : ''}`}
-                    onClick={() => setActiveViz(viz.id)}
-                  >
-                    <i
-                      className={`fa-solid ${vizTypeIcon(viz.type)} me-1`}
-                    ></i>
-                    {viz.title || viz.type}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <span className="badge text-bg-light border">Visualization switcher</span>
+                <span className="text-muted small">
+                  {report.visualizations.length} views available for this report
+                </span>
+                {activeVisualization && (
+                  <span className="badge text-bg-primary">
+                    Active: {activeVisualization.title || activeVisualization.type}
+                  </span>
+                )}
+              </div>
+              <ul className="nav nav-tabs mb-2 flex-shrink-0">
+                {report.visualizations.map((viz) => (
+                  <li className="nav-item" key={viz.id}>
+                    <button
+                      className={`nav-link d-flex align-items-center gap-2 ${activeViz === viz.id ? 'active' : ''}`}
+                      onClick={() => setActiveViz(viz.id)}
+                    >
+                      <i className={`fa-solid ${vizTypeIcon(viz.type)}`}></i>
+                      <span className="text-truncate">{viz.title || viz.type}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           {/* Result card */}
-          <div className="card border-0 shadow-sm flex-grow-1 overflow-hidden">
+          <div className="card border-0 shadow-sm">
             {/* Card header: data freshness + fullscreen */}
             {executeMutation.data && (
               <div className="card-header bg-white py-2 d-flex align-items-center gap-2">
@@ -424,7 +591,7 @@ export function ReportViewerPage() {
               </div>
             )}
 
-            <div className="card-body p-0 h-100 overflow-hidden">
+            <div className="card-body p-0">
               {/* Loading */}
               {executeMutation.isPending && (
                 <div className="d-flex align-items-center justify-content-center h-100">
@@ -448,15 +615,121 @@ export function ReportViewerPage() {
 
               {/* Results */}
               {executeMutation.data && activeVisualization && !executeMutation.isPending && (
-                <div className="h-100">
-                  <VizRenderer
-                    visualization={activeVisualization}
-                    result={executeMutation.data}
-                    visibleColumns={visibleColumns}
-                    page={page}
-                    pageSize={pageSize}
-                    onPageChange={handlePageChange}
-                  />
+                <div className="row g-3">
+                  <div className="col-xl-10">
+                    <div className="d-flex flex-column" style={{ minHeight: '68vh' }}>
+                      <VizRenderer
+                        visualization={activeVisualization}
+                        result={executeMutation.data}
+                        visibleColumns={visibleColumns}
+                        page={page}
+                        pageSize={pageSize}
+                        onPageChange={handlePageChange}
+                      />
+                      <div className="border-top bg-light p-3">
+                        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                          <div className="small text-muted">
+                            <i className="fa-solid fa-chart-simple me-1"></i>
+                            {report.visualizations.length} visuals in this report
+                          </div>
+                          <div className="d-flex flex-wrap gap-2">
+                            <span className="badge text-bg-light border">{executeMutation.data.totalRows.toLocaleString()} rows</span>
+                            <span className="badge text-bg-light border">{executeMutation.data.executionTimeMs} ms</span>
+                            {executeMutation.data.cached ? (
+                              <span className="badge text-bg-info">Cached</span>
+                            ) : (
+                              <span className="badge text-bg-warning text-dark">Live</span>
+                            )}
+                          </div>
+                        </div>
+                        {resultPreviewRows(executeMutation.data.rows, resultPreviewColumns(executeMutation.data.columns)).length > 0 && activeVisualization.type !== 'Table' && (
+                          <div className="table-responsive">
+                            <table className="table table-sm table-hover align-middle mb-0">
+                              <thead className="table-light">
+                                <tr>
+                                  {resultPreviewColumns(executeMutation.data.columns).map((column) => (
+                                    <th key={column.name}>{column.name}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {resultPreviewRows(executeMutation.data.rows, resultPreviewColumns(executeMutation.data.columns)).map((row, rowIndex) => (
+                                  <tr key={rowIndex}>
+                                    {resultPreviewColumns(executeMutation.data.columns).map((column) => (
+                                      <td key={column.name} className="small">{formatPreviewCell(row[column.name])}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-xl-2">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-header bg-white py-3">
+                        <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Report context</div>
+                        <h6 className="fw-bold mb-0">Related workspace and governance</h6>
+                      </div>
+                      <div className="card-body d-flex flex-column gap-3">
+                        <div>
+                          <div className="text-muted small text-uppercase fw-semibold mb-1">Workspace</div>
+                          {report.workspaceId ? (
+                            <Link to={`/workspaces/${report.workspaceId}`} className="fw-semibold text-decoration-none d-block">
+                              {report.workspaceName || 'Open workspace'}
+                            </Link>
+                          ) : (
+                            <div className="fw-semibold">No workspace</div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-muted small text-uppercase fw-semibold mb-1">Dataset</div>
+                          {report.dataset?.id ? (
+                            <Link to={`/datasets/${report.dataset.id}`} className="fw-semibold text-decoration-none d-block">
+                              {report.dataset.name}
+                            </Link>
+                          ) : (
+                            <div className="fw-semibold">No dataset</div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-muted small text-uppercase fw-semibold mb-1">Governance</div>
+                          <div className="d-flex flex-wrap gap-2">
+                            {report.category?.name ? <span className="badge text-bg-light border">{report.category.name}</span> : <span className="text-muted small">Uncategorized</span>}
+                            {report.isFeatured && <span className="badge text-bg-primary">Featured</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted small text-uppercase fw-semibold mb-1">Signals</div>
+                          <div className="d-flex flex-column gap-2">
+                            <div className="d-flex justify-content-between gap-2 small">
+                              <span className="text-muted">Visuals</span>
+                              <span className="fw-semibold">{report.visualizations?.length ?? 0}</span>
+                            </div>
+                            <div className="d-flex justify-content-between gap-2 small">
+                              <span className="text-muted">Columns</span>
+                              <span className="fw-semibold">{visibleColumns.length}</span>
+                            </div>
+                            <div className="d-flex justify-content-between gap-2 small">
+                              <span className="text-muted">Runs</span>
+                              <span className="fw-semibold">{report.executionCount}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-auto">
+                          <div className="text-muted small text-uppercase fw-semibold mb-2">Quick drill-through</div>
+                          <div className="d-grid gap-2">
+                            {report.workspaceId && <Link to={`/dashboards?workspaceId=${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Workspace dashboards</Link>}
+                            {report.workspaceId && <Link to={`/catalog?workspaceId=${report.workspaceId}`} className="btn btn-outline-secondary btn-sm">Workspace reports</Link>}
+                            {report.dataset?.id && <Link to={`/datasets/${report.dataset.id}`} className="btn btn-outline-secondary btn-sm">Open dataset</Link>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -612,6 +885,81 @@ function VizRenderer({ visualization, result, visibleColumns, page, pageSize, on
     );
   }
 
+  if (visualization.type === 'Radar') {
+    const categoryField = fieldForRole(visualization, 'Category') || (visualization as any).xAxisColumn || (visualization as any).labelColumn;
+    const valueFields = extractValueFields(visualization, visibleColumns, 1);
+    return (
+      <RadarRenderer
+        data={dataProps}
+        config={{
+          labelColumn: categoryField || visibleColumns[0]?.sourceName || '',
+          valueColumns: valueFields,
+          title: visualization.title,
+          showLegend: visualization.showLegend,
+          fill: (visualization as any).fill,
+        }}
+      />
+    );
+  }
+
+  if (visualization.type === 'Funnel') {
+    const stageField = fieldForRole(visualization, 'Category') || (visualization as any).stageColumn || visibleColumns[0]?.sourceName || '';
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).valueColumn || visibleColumns[1]?.sourceName || visibleColumns[0]?.sourceName || '';
+    return (
+      <FunnelRenderer
+        data={dataProps}
+        config={{
+          stageColumn: stageField,
+          valueColumn: valueField,
+          title: visualization.title,
+          showConversionRate: (visualization as any).showConversionRate,
+          inverted: (visualization as any).inverted,
+          colorScheme: (visualization as any).colorScheme,
+        }}
+      />
+    );
+  }
+
+  if (visualization.type === 'Heatmap') {
+    const xField = fieldForRole(visualization, 'Category') || (visualization as any).xColumn || visibleColumns[0]?.sourceName || '';
+    const yField = (visualization as any).yColumn || visibleColumns[1]?.sourceName || visibleColumns[0]?.sourceName || '';
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).valueColumn || visibleColumns[2]?.sourceName || visibleColumns[1]?.sourceName || visibleColumns[0]?.sourceName || '';
+    return (
+      <HeatmapRenderer
+        data={dataProps}
+        config={{
+          xColumn: xField,
+          yColumn: yField,
+          valueColumn: valueField,
+          title: visualization.title,
+          colorScaleLow: (visualization as any).colorScaleLow,
+          colorScaleHigh: (visualization as any).colorScaleHigh,
+          showValues: (visualization as any).showValues,
+        }}
+      />
+    );
+  }
+
+  if (visualization.type === 'Waterfall') {
+    const categoryField = fieldForRole(visualization, 'Category') || (visualization as any).categoryColumn || visibleColumns[0]?.sourceName || '';
+    const valueField = fieldForRole(visualization, 'Values') || (visualization as any).valueColumn || visibleColumns[1]?.sourceName || visibleColumns[0]?.sourceName || '';
+    return (
+      <WaterfallRenderer
+        data={dataProps}
+        config={{
+          categoryColumn: categoryField,
+          valueColumn: valueField,
+          title: visualization.title,
+          typeColumn: (visualization as any).typeColumn,
+          increaseColor: (visualization as any).increaseColor,
+          decreaseColor: (visualization as any).decreaseColor,
+          totalColor: (visualization as any).totalColor,
+          showConnectorLines: (visualization as any).showConnectorLines,
+        }}
+      />
+    );
+  }
+
   return (
     <div className="d-flex align-items-center justify-content-center h-100 text-muted">
       <span>Unsupported visualization type: {visualization.type}</span>
@@ -624,6 +972,21 @@ function fieldForRole(visualization: Report['visualizations'][number], role: str
     ?.filter(well => well.role === role)
     .sort((a, b) => a.displayOrder - b.displayOrder)[0]
     ?.field;
+}
+
+function extractValueFields(
+  visualization: Report['visualizations'][number],
+  visibleColumns: Array<{ sourceName: string }>,
+  minimum: number
+): string[] {
+  const fromWells = visualization.fieldWells
+    ?.filter(well => well.role === 'Values')
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map(well => well.field)
+    .filter((field): field is string => !!field) ?? [];
+
+  if (fromWells.length > 0) return fromWells;
+  return visibleColumns.slice(0, Math.max(minimum, 1)).map(column => column.sourceName);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -660,6 +1023,38 @@ function parseParamValue(value: string, param: ParameterDefinition): unknown {
     default:
       return value;
   }
+}
+
+function resultPreviewColumns(columns: ExecutionResult['columns']) {
+  return columns.slice(0, 5);
+}
+
+function resultPreviewRows(rows: ExecutionResult['rows'], columns: ExecutionResult['columns']) {
+  return rows.slice(0, 5).map(row => {
+    const preview: Record<string, unknown> = {};
+    columns.slice(0, 5).forEach(column => {
+      preview[column.name] = row[column.name];
+    });
+    return preview;
+  });
+}
+
+function formatPreviewCell(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 export default ReportViewerPage;

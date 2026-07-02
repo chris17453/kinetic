@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { Dashboard, DashboardWidget, Visibility, Workspace } from '../../lib/api/types';
 import { Breadcrumb, useToast } from '../../components/common';
+import { defaultDashboardWidgets } from '../../lib/dashboards/dashboardTemplates';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface DashboardForm {
   id?: string;
@@ -11,6 +13,7 @@ interface DashboardForm {
   description: string;
   workspaceId: string;
   visibility: Visibility;
+  template: 'Default' | 'Enterprise';
 }
 
 const EMPTY_FORM: DashboardForm = {
@@ -18,11 +21,14 @@ const EMPTY_FORM: DashboardForm = {
   description: '',
   workspaceId: '',
   visibility: 'Private',
+  template: 'Default',
 };
 
 export function DashboardsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { canCreateReports, canManageReports, canManageConnections, canUploadData } = usePermissions();
+  const canManageDashboards = canCreateReports || canManageReports || canManageConnections || canUploadData;
   const [searchParams] = useSearchParams();
   const [workspaceId, setWorkspaceId] = useState(searchParams.get('workspaceId') ?? '');
   const [search, setSearch] = useState('');
@@ -54,7 +60,7 @@ export function DashboardsPage() {
         description: values.description || undefined,
         workspaceId: values.workspaceId || undefined,
         visibility: values.visibility,
-        widgets: values.id ? undefined : defaultWidgets(values.name),
+        widgets: values.id ? undefined : defaultDashboardWidgets(values.template === 'Enterprise' ? `Enterprise ${values.name}` : values.name),
       };
 
       if (values.id) return api.put(`/dashboards/${values.id}`, payload);
@@ -87,14 +93,62 @@ export function DashboardsPage() {
     <div>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div>
-          <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Dashboards' }]} />
+          <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Dashboards' }]} />
           <h4 className="fw-bold mb-1">Dashboards</h4>
-          <p className="text-muted small mb-0">Compose and manage pinned BI layouts.</p>
+          <p className="text-muted small mb-0">Curated executive and operational views for monitoring, not raw analysis.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setForm({ ...EMPTY_FORM, workspaceId })}>
+        {canManageDashboards && (
+          <button className="btn btn-primary" onClick={() => setForm({ ...EMPTY_FORM, workspaceId })}>
           <i className="fa-solid fa-plus me-2"></i>
           New Dashboard
-        </button>
+          </button>
+        )}
+      </div>
+
+      <div className="card border-0 shadow-sm mb-3">
+        <div className="card-body py-3">
+          <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+            <div className="min-width-0">
+              <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Dashboard hub</div>
+              <div className="fw-semibold">Dashboards are for executive monitoring, not deep analysis.</div>
+              <div className="text-muted small">Use them to track status, KPI cards, and pinned views; use reports for exploration.</div>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <Link to="/dashboards" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-layer-group me-1"></i>
+                All dashboards
+              </Link>
+              <Link to="/workspaces" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-briefcase me-1"></i>
+                Browse workspaces
+              </Link>
+              {canManageDashboards && (
+                <button className="btn btn-primary btn-sm" onClick={() => setForm({ ...EMPTY_FORM, workspaceId })}>
+                  <i className="fa-solid fa-plus me-1"></i>
+                  New dashboard
+                </button>
+              )}
+            </div>
+          </div>
+          {workspaces && workspaces.length > 0 && (
+            <div className="d-flex flex-wrap gap-2 mt-3">
+              {workspaces.slice(0, 6).map(workspace => {
+                const active = workspaceId === workspace.id;
+                return (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    className={`badge border ${active ? 'text-bg-primary border-primary' : 'text-bg-light text-dark border-secondary-subtle'}`}
+                    onClick={() => setWorkspaceId(active ? '' : workspace.id)}
+                  >
+                    <i className="fa-solid fa-briefcase me-1"></i>
+                    {workspace.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="row g-3 mb-3">
@@ -124,33 +178,35 @@ export function DashboardsPage() {
         </div>
       </div>
 
-      <div className="card border-0 shadow-sm mb-3">
-        <div className="card-body py-3">
-          <div className="row g-2">
-            <div className="col-md-5">
-              <div className="input-group">
-                <span className="input-group-text bg-white">
-                  <i className="fa-solid fa-search text-muted"></i>
-                </span>
-                <input
-                  className="form-control"
-                  placeholder="Search dashboards..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+      {canManageDashboards && (
+        <div className="card border-0 shadow-sm mb-3">
+          <div className="card-body py-3">
+            <div className="row g-2">
+              <div className="col-md-5">
+                <div className="input-group">
+                  <span className="input-group-text bg-white">
+                    <i className="fa-solid fa-search text-muted"></i>
+                  </span>
+                  <input
+                    className="form-control"
+                    placeholder="Search dashboards..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="col-md-4">
-              <select className="form-select" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
-                <option value="">All workspaces</option>
-                {workspaces?.map(workspace => (
-                  <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-                ))}
-              </select>
+              <div className="col-md-4">
+                <select className="form-select" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+                  <option value="">All workspaces</option>
+                  {workspaces?.map(workspace => (
+                    <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {isLoading ? (
         <div className="text-center text-muted py-5">
@@ -177,36 +233,63 @@ export function DashboardsPage() {
                 <div className="card-body">
                   <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
                     <div className="min-width-0">
-                      <div className="fw-semibold text-truncate">{dashboard.name}</div>
+                      <div className="fw-semibold text-truncate">
+                        <Link to={`/dashboards/${dashboard.id}`} className="text-decoration-none">
+                          {dashboard.name}
+                        </Link>
+                      </div>
                       <div className="text-muted small text-truncate">
                         {dashboard.workspaceName || 'No workspace'} · {dashboard.visibility}
                       </div>
+                      <div className="d-flex flex-wrap gap-1 mt-2">
+                        {dashboard.workspaceId && (
+                          <Link
+                            to={`/workspaces/${dashboard.workspaceId}`}
+                            className="badge text-bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 text-decoration-none"
+                            style={{ fontSize: '0.68rem' }}
+                          >
+                            <i className="fa-solid fa-briefcase me-1"></i>
+                            {dashboard.workspaceName || 'Workspace'}
+                          </Link>
+                        )}
+                        <Link
+                          to={`/dashboards/${dashboard.id}`}
+                          className="badge text-bg-primary text-decoration-none"
+                          style={{ fontSize: '0.68rem' }}
+                        >
+                          Open canvas
+                        </Link>
+                      </div>
                     </div>
                     <div className="dropdown">
-                      <button className="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
-                        <i className="fa-solid fa-ellipsis"></i>
-                      </button>
-                      <ul className="dropdown-menu dropdown-menu-end">
-                        <li>
-                          <button className="dropdown-item" onClick={() => setForm(dashboardToForm(dashboard))}>
-                            <i className="fa-solid fa-pen me-2"></i>
-                            Edit
-                          </button>
-                        </li>
-                        <li>
-                          <button
-                            className="dropdown-item text-danger"
-                            onClick={() => archiveMutation.mutate(dashboard.id)}
-                          >
-                            <i className="fa-solid fa-box-archive me-2"></i>
-                            Archive
-                          </button>
-                        </li>
-                      </ul>
+                      {canManageDashboards && (
+                        <button className="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                          <i className="fa-solid fa-ellipsis"></i>
+                        </button>
+                      )}
+                      {canManageDashboards && (
+                        <ul className="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <button className="dropdown-item" onClick={() => setForm(dashboardToForm(dashboard))}>
+                              <i className="fa-solid fa-pen me-2"></i>
+                              Edit
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item text-danger"
+                              onClick={() => archiveMutation.mutate(dashboard.id)}
+                            >
+                              <i className="fa-solid fa-box-archive me-2"></i>
+                              Archive
+                            </button>
+                          </li>
+                        </ul>
+                      )}
                     </div>
                   </div>
                   <p className="text-muted small mb-3" style={{ minHeight: 38 }}>
-                    {dashboard.description || 'Dashboard layout ready for pinned visuals.'}
+                    {dashboard.description || 'Monitoring layout ready for pinned KPI cards and summaries.'}
                   </p>
                   <DashboardPreview widgets={dashboard.widgets} />
                 </div>
@@ -214,11 +297,12 @@ export function DashboardsPage() {
                   <div className="d-flex align-items-center justify-content-between gap-2">
                     <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
                       <i className="fa-solid fa-grip me-1"></i>
-                      {dashboard.widgetCount} widget{dashboard.widgetCount === 1 ? '' : 's'}
+                      {dashboard.widgetCount} widget{dashboard.widgetCount === 1 ? '' : 's'} · monitoring canvas
                     </span>
+                    <span className="text-muted small d-none d-md-inline">Open to view or edit the canvas</span>
                     <Link to={`/dashboards/${dashboard.id}`} className="btn btn-sm btn-primary">
                       <i className="fa-solid fa-pen-ruler me-1"></i>
-                      Canvas
+                      Open canvas
                     </Link>
                   </div>
                 </div>
@@ -228,7 +312,7 @@ export function DashboardsPage() {
         </div>
       )}
 
-      {form && (
+      {form && canManageDashboards && (
         <DashboardFormModal
           form={form}
           workspaces={workspaces ?? []}
@@ -292,8 +376,9 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
           </div>
           <div className="modal-body">
             <div className="mb-3">
-              <label className="form-label fw-semibold">Name</label>
+              <label className="form-label fw-semibold" htmlFor="dashboard-name">Name</label>
               <input
+                id="dashboard-name"
                 className="form-control"
                 value={form.name}
                 onChange={(e) => onChange({ ...form, name: e.target.value })}
@@ -301,8 +386,9 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
               />
             </div>
             <div className="mb-3">
-              <label className="form-label fw-semibold">Description</label>
+              <label className="form-label fw-semibold" htmlFor="dashboard-description">Description</label>
               <textarea
+                id="dashboard-description"
                 className="form-control"
                 rows={3}
                 value={form.description}
@@ -311,8 +397,9 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
             </div>
             <div className="row g-3">
               <div className="col-md-6">
-                <label className="form-label fw-semibold">Workspace</label>
+                <label className="form-label fw-semibold" htmlFor="dashboard-workspace">Workspace</label>
                 <select
+                  id="dashboard-workspace"
                   className="form-select"
                   value={form.workspaceId}
                   onChange={(e) => onChange({ ...form, workspaceId: e.target.value })}
@@ -324,8 +411,9 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label fw-semibold">Visibility</label>
+                <label className="form-label fw-semibold" htmlFor="dashboard-visibility">Visibility</label>
                 <select
+                  id="dashboard-visibility"
                   className="form-select"
                   value={form.visibility}
                   onChange={(e) => onChange({ ...form, visibility: e.target.value as Visibility })}
@@ -335,6 +423,31 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
                   <option value="Department">Department</option>
                   <option value="Public">Public</option>
                 </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="form-label fw-semibold">Template</label>
+              <div className="row g-2">
+                <div className="col-6">
+                  <button
+                    type="button"
+                    className={`btn w-100 text-start ${form.template === 'Default' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => onChange({ ...form, template: 'Default' })}
+                  >
+                    <div className="fw-semibold">Default</div>
+                    <div className="small opacity-75">Report and KPI starter.</div>
+                  </button>
+                </div>
+                <div className="col-6">
+                  <button
+                    type="button"
+                    className={`btn w-100 text-start ${form.template === 'Enterprise' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => onChange({ ...form, template: 'Enterprise' })}
+                  >
+                    <div className="fw-semibold">Enterprise</div>
+                    <div className="small opacity-75">Signals and ontology layout.</div>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -360,21 +473,6 @@ function DashboardFormModal({ form, workspaces, saving, onChange, onClose, onSav
   );
 }
 
-function defaultWidgets(name: string): DashboardWidget[] {
-  return [
-    {
-      id: crypto.randomUUID(),
-      type: 'Text',
-      title: name || 'Dashboard notes',
-      x: 0,
-      y: 0,
-      width: 8,
-      height: 2,
-      config: { markdown: 'Add pinned report visuals and KPI cards here.' },
-    },
-  ];
-}
-
 function dashboardToForm(dashboard: Dashboard): DashboardForm {
   return {
     id: dashboard.id,
@@ -382,6 +480,7 @@ function dashboardToForm(dashboard: Dashboard): DashboardForm {
     description: dashboard.description || '',
     workspaceId: dashboard.workspaceId || '',
     visibility: dashboard.visibility,
+    template: /enterprise|leadership|executive|board/i.test(dashboard.name) ? 'Enterprise' : 'Default',
   };
 }
 

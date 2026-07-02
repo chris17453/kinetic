@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useBrandingStore } from '../../stores/brandingStore';
 
 export function AuthCallbackPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { completeExternalLogin } = useAuthStore();
+  const { branding, fetchGlobalBranding } = useBrandingStore();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    fetchGlobalBranding();
+
     const token = searchParams.get('token');
     const refreshToken = searchParams.get('refreshToken') ?? undefined;
     const authError = searchParams.get('error');
@@ -20,14 +24,16 @@ export function AuthCallbackPage() {
     }
 
     if (!token) {
-      setError('The identity provider did not return a Kinetic session.');
+      setError('The identity provider did not return a valid enterprise session.');
       return;
     }
 
     completeExternalLogin(token, refreshToken)
       .then(() => navigate('/', { replace: true }))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'External login failed'));
-  }, [completeExternalLogin, navigate, searchParams]);
+  }, [completeExternalLogin, fetchGlobalBranding, navigate, searchParams]);
+  const primaryColor = branding?.primaryColor || '#2563EB';
+  const orgName = branding?.orgName || 'Enterprise';
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light p-4">
@@ -46,11 +52,11 @@ export function AuthCallbackPage() {
           </>
         ) : (
           <div className="text-center py-3">
-            <div className="spinner-border text-primary mb-3" role="status">
+            <div className="spinner-border mb-3" role="status" style={{ color: primaryColor }}>
               <span className="visually-hidden">Loading...</span>
             </div>
             <h5 className="fw-semibold mb-1">Completing sign in</h5>
-            <p className="text-muted small mb-0">Finalizing your Kinetic session.</p>
+            <p className="text-muted small mb-0">Finalizing your {orgName} session.</p>
           </div>
         )}
       </div>

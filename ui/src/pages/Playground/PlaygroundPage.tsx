@@ -105,7 +105,7 @@ export function PlaygroundPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Query Playground' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Query Playground' }]} />
 
       {/* Toolbar */}
       <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">

@@ -86,7 +86,7 @@ export function TableViewerPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Table Viewer' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Table Viewer' }]} />
 
       <div className="d-flex align-items-center gap-2 mb-4">
         <i className="fa-solid fa-database text-primary" style={{ fontSize: '1.25rem' }}></i>

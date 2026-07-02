@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -84,6 +84,8 @@ export function ConnectionFormPage() {
     },
   });
 
+  const selectedWorkspaceName = workspaces?.find(workspace => workspace.id === searchParams.get('workspaceId') || workspace.id === watch('workspaceId'))?.name;
+
   useQuery({
     queryKey: ['connections', id],
     queryFn: async () => {
@@ -136,7 +138,7 @@ export function ConnectionFormPage() {
   return (
     <div>
       <Breadcrumb crumbs={[
-        { label: 'Dashboard', path: '/' },
+        { label: 'Home', path: '/' },
         { label: 'Connections', path: '/connections' },
         { label: isEditing ? 'Edit Connection' : 'New Connection' },
       ]} />
@@ -146,6 +148,32 @@ export function ConnectionFormPage() {
           <div className="d-flex align-items-center gap-2 mb-4">
             <i className={`fa-solid ${isEditing ? 'fa-pen-to-square' : 'fa-plug'} text-primary`} style={{ fontSize: '1.25rem' }}></i>
             <h4 className="fw-bold mb-0">{isEditing ? 'Edit Connection' : 'New Connection'}</h4>
+          </div>
+
+          <div className="card border-0 shadow-sm mb-4">
+            <div className="card-body py-3">
+              <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+                <div className="min-width-0">
+                  <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Connection hub</div>
+                  <div className="fw-semibold">Source systems are shared assets for reports, datasets, and workspaces.</div>
+                  <div className="text-muted small">{selectedWorkspaceName ? `Scoped to ${selectedWorkspaceName}` : 'Optional workspace scope for governed access and reuse.'}</div>
+                </div>
+                <div className="d-flex flex-wrap gap-2">
+                  <Link to="/connections" className="btn btn-outline-secondary btn-sm">
+                    <i className="fa-solid fa-server me-1"></i>
+                    All connections
+                  </Link>
+                  <Link to="/catalog" className="btn btn-outline-secondary btn-sm">
+                    <i className="fa-solid fa-chart-bar me-1"></i>
+                    Reports
+                  </Link>
+                  <Link to="/workspaces" className="btn btn-outline-secondary btn-sm">
+                    <i className="fa-solid fa-briefcase me-1"></i>
+                    Workspaces
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)}>

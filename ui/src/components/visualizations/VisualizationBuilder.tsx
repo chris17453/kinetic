@@ -16,22 +16,22 @@ interface VisualizationBuilderProps {
   onChange: (visualizations: VisualizationConfig[]) => void;
 }
 
-const vizTypes: { value: VisualizationType; label: string; icon: string }[] = [
-  { value: 'Table', label: 'Table', icon: '📋' },
-  { value: 'Bar', label: 'Bar Chart', icon: '📊' },
-  { value: 'BarHorizontal', label: 'Horizontal Bar', icon: '📊' },
-  { value: 'BarStacked', label: 'Stacked Bar', icon: '📊' },
-  { value: 'Line', label: 'Line Chart', icon: '📈' },
-  { value: 'Area', label: 'Area Chart', icon: '📈' },
-  { value: 'Pie', label: 'Pie Chart', icon: '🥧' },
-  { value: 'Doughnut', label: 'Doughnut', icon: '🍩' },
-  { value: 'Scatter', label: 'Scatter Plot', icon: '⚫' },
-  { value: 'Radar', label: 'Radar', icon: '🎯' },
-  { value: 'Funnel', label: 'Funnel', icon: '🔻' },
-  { value: 'Gauge', label: 'Gauge', icon: '🎛️' },
-  { value: 'KpiCard', label: 'KPI Card', icon: '🔢' },
-  { value: 'Heatmap', label: 'Heatmap', icon: '🗺️' },
-  { value: 'Treemap', label: 'Treemap', icon: '🌳' },
+const vizTypes: { value: VisualizationType; label: string; icon: string; group: string; description: string }[] = [
+  { value: 'KpiCard', label: 'KPI Card', icon: 'fa-square-poll-vertical', group: 'Executive', description: 'Headline metric with trend context.' },
+  { value: 'Gauge', label: 'Gauge', icon: 'fa-gauge-high', group: 'Executive', description: 'Threshold-based target tracking.' },
+  { value: 'Table', label: 'Table', icon: 'fa-table', group: 'Core', description: 'Operational detail and line-item review.' },
+  { value: 'Bar', label: 'Bar Chart', icon: 'fa-chart-column', group: 'Core', description: 'Compare categories across measures.' },
+  { value: 'BarHorizontal', label: 'Horizontal Bar', icon: 'fa-chart-column', group: 'Core', description: 'Ranked categories and labels.' },
+  { value: 'BarStacked', label: 'Stacked Bar', icon: 'fa-chart-column', group: 'Core', description: 'Compare composition across segments.' },
+  { value: 'Line', label: 'Line Chart', icon: 'fa-chart-line', group: 'Core', description: 'Trend and time-series analysis.' },
+  { value: 'Area', label: 'Area Chart', icon: 'fa-chart-area', group: 'Core', description: 'Trend with emphasis on volume.' },
+  { value: 'Pie', label: 'Pie Chart', icon: 'fa-chart-pie', group: 'Core', description: 'Part-to-whole composition.' },
+  { value: 'Doughnut', label: 'Doughnut', icon: 'fa-chart-pie', group: 'Core', description: 'Compact composition view.' },
+  { value: 'Scatter', label: 'Scatter Plot', icon: 'fa-braille', group: 'Analysis', description: 'Correlations and clusters.' },
+  { value: 'Radar', label: 'Radar', icon: 'fa-chart-radar', group: 'Analysis', description: 'Multivariate comparison.' },
+  { value: 'Funnel', label: 'Funnel', icon: 'fa-filter', group: 'Analysis', description: 'Stage progression and drop-off.' },
+  { value: 'Heatmap', label: 'Heatmap', icon: 'fa-fire', group: 'Analysis', description: 'Density and hotspot analysis.' },
+  { value: 'Treemap', label: 'Treemap', icon: 'fa-sitemap', group: 'Analysis', description: 'Hierarchical composition.' },
 ];
 
 export function VisualizationBuilder({ visualizations, columns, onChange }: VisualizationBuilderProps) {
@@ -77,19 +77,31 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
 
       {/* Add visualization buttons */}
       <div className="card p-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Add Visualization</h3>
-        <div className="flex flex-wrap gap-2">
-          {vizTypes.map((vt) => (
-            <button
-              key={vt.value}
-              onClick={() => addVisualization(vt.value)}
-              className="inline-flex items-center gap-1 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md text-sm transition-colors"
-            >
-              <span>{vt.icon}</span>
-              <span>{vt.label}</span>
-            </button>
-          ))}
+        <div className="d-flex align-items-center justify-content-between gap-3 mb-3">
+          <div>
+            <h3 className="h6 fw-bold mb-1">Add visualization</h3>
+            <div className="text-muted small">Choose a layout for executive summaries, operational detail, or analytical review.</div>
+          </div>
+          <span className="badge text-bg-light border">Enterprise-ready</span>
         </div>
+        {[...new Set(vizTypes.map(v => v.group))].map(group => (
+          <div key={group} className="mb-3">
+            <div className="small text-uppercase text-muted fw-semibold mb-2" style={{ letterSpacing: '0.08em' }}>{group}</div>
+            <div className="d-flex flex-wrap gap-2">
+              {vizTypes.filter(v => v.group === group).map((vt) => (
+                <button
+                  key={vt.value}
+                  onClick={() => addVisualization(vt.value)}
+                  className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                  title={vt.description}
+                >
+                  <i className={`fa-solid ${vt.icon}`}></i>
+                  <span>{vt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Configured visualizations */}
@@ -103,7 +115,7 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
             <div key={viz.id} className="card">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{vizTypes.find((v) => v.value === viz.type)?.icon}</span>
+                  <i className={`fa-solid ${vizTypes.find((v) => v.value === viz.type)?.icon ?? 'fa-chart-column'} text-primary text-xl`}></i>
                   <input
                     type="text"
                     className="font-medium bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary-500 rounded px-1"
@@ -118,10 +130,7 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
                 </div>
                 <div className="flex items-center gap-2">
                   {!viz.isDefault && (
-                    <button
-                      onClick={() => setDefault(index)}
-                      className="text-sm text-gray-500 hover:text-gray-700"
-                    >
+                    <button onClick={() => setDefault(index)} className="text-sm text-gray-500 hover:text-gray-700">
                       Set Default
                     </button>
                   )}
@@ -129,7 +138,7 @@ export function VisualizationBuilder({ visualizations, columns, onChange }: Visu
                     onClick={() => removeVisualization(index)}
                     className="text-red-500 hover:text-red-700"
                   >
-                    🗑️
+                    <i className="fa-solid fa-trash"></i>
                   </button>
                 </div>
               </div>
@@ -546,6 +555,72 @@ function VizConfigEditor({ type, config, columns, onChange }: VizConfigEditorPro
     );
   }
 
+  if (type === 'Radar') {
+    return (
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Category Column</label>
+          <select className="w-full px-2 py-1 border border-gray-300 rounded text-sm" value={config.labelColumn as string ?? ''} onChange={(e) => update('labelColumn', e.target.value)}>
+            <option value="">Select column...</option>
+            {visibleColumns.map((col) => <option key={col.sourceName} value={col.sourceName}>{col.displayName}</option>)}
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={config.showLegend as boolean ?? true} onChange={(e) => update('showLegend', e.target.checked)} className="rounded border-gray-300" />
+          Show Legend
+        </label>
+      </div>
+    );
+  }
+
+  if (type === 'Funnel') {
+    return (
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Stage Column</label>
+          <select className="w-full px-2 py-1 border border-gray-300 rounded text-sm" value={config.stageColumn as string ?? ''} onChange={(e) => update('stageColumn', e.target.value)}>
+            <option value="">Select column...</option>
+            {visibleColumns.map((col) => <option key={col.sourceName} value={col.sourceName}>{col.displayName}</option>)}
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={config.showConversionRate as boolean ?? true} onChange={(e) => update('showConversionRate', e.target.checked)} className="rounded border-gray-300" />
+          Show Conversion Rate
+        </label>
+      </div>
+    );
+  }
+
+  if (type === 'Heatmap') {
+    return (
+      <div className="grid grid-cols-2 gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={config.showValues as boolean ?? true} onChange={(e) => update('showValues', e.target.checked)} className="rounded border-gray-300" />
+          Show Values
+        </label>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">High Color</label>
+          <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="#1d4ed8" value={config.colorScaleHigh as string ?? ''} onChange={(e) => update('colorScaleHigh', e.target.value)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'Waterfall') {
+    return (
+      <div className="grid grid-cols-2 gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={config.showConnectorLines as boolean ?? true} onChange={(e) => update('showConnectorLines', e.target.checked)} className="rounded border-gray-300" />
+          Show Connector Lines
+        </label>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Total Color</label>
+          <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="#0f766e" value={config.totalColor as string ?? ''} onChange={(e) => update('totalColor', e.target.value)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="text-sm text-gray-500">
       Configuration for {type} coming soon...
@@ -568,6 +643,16 @@ function getDefaultConfig(type: VisualizationType): Record<string, unknown> {
       return { showPercentages: true, showLegend: true };
     case 'KpiCard':
       return { showTrend: true };
+    case 'Gauge':
+      return { min: 0, max: 100, colorScheme: 'enterprise' };
+    case 'Radar':
+      return { showLegend: true, fill: true };
+    case 'Funnel':
+      return { showConversionRate: true, inverted: false };
+    case 'Heatmap':
+      return { showValues: true, colorScaleLow: '#eff6ff', colorScaleHigh: '#1d4ed8' };
+    case 'Waterfall':
+      return { showConnectorLines: true, totalColor: '#0f766e' };
     default:
       return {};
   }

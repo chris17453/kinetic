@@ -8,6 +8,8 @@ import { ParameterBuilder } from '../../components/parameters/ParameterBuilder';
 import { ColumnEditor } from '../../components/columns/ColumnEditor';
 import { VisualizationBuilder } from '../../components/visualizations/VisualizationBuilder';
 import { Breadcrumb, useToast } from '../../components/common';
+import { defaultReportVisualizations, type ReportTemplate } from '../../lib/reports/reportTemplates';
+import { usePermissions } from '../../hooks/usePermissions';
 
 type Tab = 'query' | 'parameters' | 'columns' | 'visualization' | 'settings' | 'schedule';
 
@@ -49,6 +51,7 @@ interface ReportApiPayload {
 interface ReportForm {
   name: string;
   description: string;
+  template: ReportTemplate;
   workspaceId: string;
   datasetId: string;
   semanticDimensionFieldIds: string[];
@@ -72,6 +75,7 @@ interface ReportForm {
 const EMPTY_FORM: ReportForm = {
   name: '',
   description: '',
+  template: 'Standard',
   workspaceId: '',
   datasetId: '',
   semanticDimensionFieldIds: [],
@@ -108,6 +112,8 @@ export function ReportBuilderPage() {
   const queryClient = useQueryClient();
   const isEditing = !!id;
   const toast = useToast();
+  const { canCreateReports, canManageReports } = usePermissions();
+  const canAccessBuilder = isEditing ? canManageReports : canCreateReports;
 
   const [activeTab, setActiveTab] = useState<Tab>('query');
   const [form, setForm] = useState<ReportForm>(() => ({
@@ -342,10 +348,50 @@ export function ReportBuilderPage() {
   ];
 
   const breadcrumbs = [
-    { label: 'Dashboard', path: '/' },
+    { label: 'Home', path: '/' },
     { label: 'Reports', path: '/catalog' },
     { label: isEditing ? 'Edit Report' : 'New Report' },
   ];
+
+  const starterLayoutDetails: Record<ReportTemplate, { title: string; description: string; chips: string[] }> = {
+    Standard: {
+      title: 'Standard shell',
+      description: 'Blank report scaffold for custom SQL and ad hoc visuals.',
+      chips: ['Blank', 'Flexible'],
+    },
+    Executive: {
+      title: 'Executive starter',
+      description: 'KPI, gauge, trend, radar, and composition views for leadership reporting.',
+      chips: ['KPI', 'Trend', 'Composition'],
+    },
+    Operations: {
+      title: 'Operations starter',
+      description: 'Table, status, funnel, waterfall, and scatter views for operational review.',
+      chips: ['Table', 'Funnel', 'Flow'],
+    },
+  };
+  const activeStarterLayout = starterLayoutDetails[form.template];
+  const selectedWorkspaceName = workspaces?.find((workspace) => workspace.id === form.workspaceId)?.name;
+  const selectedDatasetName = datasets?.find((dataset) => dataset.id === form.datasetId)?.name;
+  const audienceLabel =
+    form.allowEmbed ? 'Embedded / external' : form.visibility === 'Public' ? 'Internal + shared' : 'Internal only';
+
+  if (!canAccessBuilder) {
+    return (
+      <div className="container-fluid py-4">
+        <div className="card border-0 shadow-sm">
+          <div className="card-body py-5 text-center">
+            <i className="fa-solid fa-shield-halved fa-2x text-primary mb-3"></i>
+            <h4 className="fw-bold mb-2">Report Builder</h4>
+            <p className="text-muted mb-3">You do not have permission to create or edit reports.</p>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/catalog')}>
+              Back to reports
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="d-flex flex-column" style={{ height: 'calc(100vh - 8rem)' }}>
@@ -364,6 +410,69 @@ export function ReportBuilderPage() {
                 onChange={(e) => updateForm({ name: e.target.value })}
                 style={{ background: 'transparent' }}
               />
+            </div>
+
+            <div className="dropdown">
+              <button
+                className="btn btn-outline-primary btn-sm dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i className="fa-solid fa-layer-group me-1"></i>
+                {form.template}
+              </button>
+              <ul className="dropdown-menu dropdown-menu-end">
+                {(['Standard', 'Executive', 'Operations'] as ReportTemplate[]).map(template => (
+                  <li key={template}>
+                    <button
+                      className="dropdown-item"
+                      onClick={() => updateForm({
+                        template,
+                        visualizations: form.visualizations.length > 0
+                          ? form.visualizations
+                          : defaultReportVisualizations(template).map((viz, index) => ({
+                              id: crypto.randomUUID(),
+                              name: viz.name,
+                              type: viz.type,
+                              isDefault: viz.isDefault,
+                              fieldWells: viz.fieldWells,
+                              layout: viz.layout,
+                              config: { ...viz.config, displayOrder: index },
+                            })),
+                      })}
+                    >
+                      {template}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="border rounded-3 px-3 py-2 bg-light d-none d-lg-block" style={{ minWidth: 260 }}>
+              <div className="text-uppercase text-muted small fw-semibold" style={{ letterSpacing: '0.08em' }}>
+                Starter layout
+              </div>
+              <div className="fw-semibold">{activeStarterLayout.title}</div>
+              <div className="text-muted small">{activeStarterLayout.description}</div>
+              <div className="d-flex flex-wrap gap-1 mt-2">
+                {activeStarterLayout.chips.map(chip => (
+                  <span key={chip} className="badge text-bg-light border">{chip}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="border rounded-3 px-3 py-2 bg-light d-none d-xl-block" style={{ minWidth: 260 }}>
+              <div className="text-uppercase text-muted small fw-semibold" style={{ letterSpacing: '0.08em' }}>
+                Scope
+              </div>
+              <div className="fw-semibold text-truncate">{selectedWorkspaceName || 'No workspace selected'}</div>
+              <div className="text-muted small text-truncate">{selectedDatasetName || 'No dataset selected'}</div>
+              <div className="d-flex flex-wrap gap-1 mt-2">
+                <span className="badge text-bg-light border">{audienceLabel}</span>
+                <span className="badge text-bg-light border">{form.executionMode}</span>
+                <span className="badge text-bg-light border">{form.cacheMode}</span>
+              </div>
             </div>
 
             {/* Unsaved changes indicator */}
@@ -505,6 +614,7 @@ function reportToForm(report: any): ReportForm {
   return {
     name: report.name ?? '',
     description: report.description || '',
+    template: report.visualizations?.length ? 'Executive' : 'Standard',
     workspaceId: report.workspaceId || '',
     datasetId: report.datasetId || '',
     semanticDimensionFieldIds: [],
@@ -1085,6 +1195,41 @@ function SettingsTab({ form, updateForm, categories, workspaces, datasets }: Set
             value={form.description}
             onChange={(e) => updateForm({ description: e.target.value })}
           />
+        </div>
+
+        <div className="mb-4">
+          <label className="form-label fw-semibold">Starter layout</label>
+          <div className="row g-2">
+            {(['Standard', 'Executive', 'Operations'] as ReportTemplate[]).map(template => (
+              <div key={template} className="col-md-4">
+                <button
+                  type="button"
+                  className={`btn w-100 text-start ${form.template === template ? 'btn-primary' : 'btn-outline-primary'}`}
+                  onClick={() => updateForm({
+                    template,
+                    visualizations: form.visualizations.length > 0
+                      ? form.visualizations
+                      : defaultReportVisualizations(template).map((viz, index) => ({
+                          id: crypto.randomUUID(),
+                          name: viz.name,
+                          type: viz.type,
+                          isDefault: viz.isDefault,
+                          fieldWells: viz.fieldWells,
+                          layout: viz.layout,
+                          config: { ...viz.config, displayOrder: index },
+                        })),
+                  })}
+                >
+                  <div className="fw-semibold">{template}</div>
+                  <div className="small opacity-75">
+                    {template === 'Standard' && 'Blank report shell.'}
+                    {template === 'Executive' && 'KPI, gauge, and trend layout.'}
+                    {template === 'Operations' && 'Table and status layout.'}
+                  </div>
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="row g-3 mb-4">

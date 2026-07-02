@@ -5,6 +5,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../components/common/Toast';
 import api from '../../lib/api/client';
 import type { Report, Category, Workspace } from '../../lib/api/types';
+import { buildEnterpriseSummary } from '../../lib/enterprise/enterpriseSummary';
+import { usePermissions } from '../../hooks/usePermissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,21 +170,21 @@ function ReportCard({ report, onFavorite, onRate }: ReportCardProps) {
         {/* Workspace, Category + Tags */}
         <div className="d-flex flex-wrap gap-1 mb-2">
           {(report.workspaceName || report.workspace?.name) && (
-            <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style={{ fontSize: '0.68rem' }}>
+            <Link to={`/catalog?workspaceId=${report.workspaceId || report.workspace?.id || ''}`} className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 text-decoration-none" style={{ fontSize: '0.68rem' }}>
               <i className="fa-solid fa-briefcase me-1"></i>
               {report.workspaceName || report.workspace?.name}
-            </span>
+            </Link>
           )}
           {report.category && (
-            <span className="badge bg-primary bg-opacity-10 text-primary" style={{ fontSize: '0.68rem' }}>
+            <Link to={`/catalog?category=${report.category.id}`} className="badge bg-primary bg-opacity-10 text-primary text-decoration-none" style={{ fontSize: '0.68rem' }}>
               {report.category.icon} {report.category.name}
-            </span>
+            </Link>
           )}
           {(report.datasetName || report.dataset?.name) && (
-            <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style={{ fontSize: '0.68rem' }}>
+            <Link to={`/datasets/${report.datasetId || report.dataset?.id || ''}`} className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 text-decoration-none" style={{ fontSize: '0.68rem' }}>
               <i className="fa-solid fa-cubes me-1"></i>
               {report.datasetName || report.dataset?.name}
-            </span>
+            </Link>
           )}
           {report.tags?.slice(0, 3).map(tag => (
             <span key={tag} className="badge bg-light text-secondary border" style={{ fontSize: '0.68rem' }}>
@@ -199,17 +201,22 @@ function ReportCard({ report, onFavorite, onRate }: ReportCardProps) {
         {/* Footer */}
         <div className="d-flex align-items-center justify-content-between border-top pt-2 gap-2">
           <StarRating value={Math.round(report.averageRating ?? 0)} onChange={onRate} />
-          <div className="text-muted d-flex align-items-center gap-2" style={{ fontSize: '0.72rem' }}>
-            <span>
-              <i className="fa-solid fa-play me-1" style={{ fontSize: '0.6rem' }} />
-              {report.executionCount ?? 0}
-            </span>
-            {report.lastExecutedAt && (
+          <div className="d-flex align-items-center gap-2">
+            <div className="text-muted d-flex align-items-center gap-2" style={{ fontSize: '0.72rem' }}>
               <span>
-                <i className="fa-solid fa-clock me-1" style={{ fontSize: '0.6rem' }} />
-                {formatDate(report.lastExecutedAt)}
+                <i className="fa-solid fa-play me-1" style={{ fontSize: '0.6rem' }} />
+                {report.executionCount ?? 0}
               </span>
-            )}
+              {report.lastExecutedAt && (
+                <span>
+                  <i className="fa-solid fa-clock me-1" style={{ fontSize: '0.6rem' }} />
+                  {formatDate(report.lastExecutedAt)}
+                </span>
+              )}
+            </div>
+            <Link to={`/reports/${report.id}`} className="btn btn-sm btn-outline-primary">
+              Open
+            </Link>
           </div>
         </div>
       </div>
@@ -226,8 +233,8 @@ interface ReportListItemProps {
 
 function ReportListItem({ report, onFavorite }: ReportListItemProps) {
   return (
-    <li className="list-group-item list-group-item-action py-3">
-      <div className="d-flex align-items-center gap-3">
+    <li className="list-group-item py-3 bg-white">
+      <div className="d-flex align-items-start gap-3">
         {/* Icon */}
         <div
           className="d-flex align-items-center justify-content-center rounded-2 bg-primary bg-opacity-10 text-primary flex-shrink-0"
@@ -238,35 +245,77 @@ function ReportListItem({ report, onFavorite }: ReportListItemProps) {
 
         {/* Name + meta */}
         <div className="flex-grow-1" style={{ minWidth: 0 }}>
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <Link
-              to={`/reports/${report.id}`}
-              className="fw-medium small text-decoration-none text-dark text-truncate"
-            >
-              {report.name}
+          <div className="d-flex align-items-start justify-content-between gap-2">
+            <div className="min-width-0">
+              <Link
+                to={`/reports/${report.id}`}
+                className="fw-semibold text-decoration-none text-dark text-truncate d-inline-block"
+              >
+                {report.name}
+              </Link>
+              <div className="text-muted small mt-1 text-truncate">
+                {report.description || 'No description provided.'}
+              </div>
+              <div className="d-flex flex-wrap gap-1 mt-2">
+                {(report.workspaceName || report.workspace?.name) && (
+                  <Link
+                    to={`/workspaces/${report.workspaceId || report.workspace?.id || ''}`}
+                    className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 text-decoration-none"
+                    style={{ fontSize: '0.68rem' }}
+                  >
+                    <i className="fa-solid fa-briefcase me-1"></i>
+                    {report.workspaceName || report.workspace?.name}
+                  </Link>
+                )}
+                {(report.datasetName || report.dataset?.name) && (
+                  <Link
+                    to={`/datasets/${report.datasetId || report.dataset?.id || ''}`}
+                    className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 text-decoration-none"
+                    style={{ fontSize: '0.68rem' }}
+                  >
+                    <i className="fa-solid fa-cubes me-1"></i>
+                    {report.datasetName || report.dataset?.name}
+                  </Link>
+                )}
+                {report.category && (
+                  <Link
+                    to={`/catalog?category=${report.category.id}`}
+                    className="badge bg-primary bg-opacity-10 text-primary text-decoration-none"
+                    style={{ fontSize: '0.68rem' }}
+                  >
+                    {report.category.icon} {report.category.name}
+                  </Link>
+                )}
+              </div>
+            </div>
+            <Link to={`/reports/${report.id}`} className="btn btn-sm btn-outline-primary flex-shrink-0">
+              Open report
             </Link>
-            {report.category && (
-              <span className="badge bg-primary bg-opacity-10 text-primary" style={{ fontSize: '0.65rem' }}>
-                {report.category.name}
-              </span>
-            )}
           </div>
-          <div className="text-muted small text-truncate d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.75rem' }}>
-            {report.connection?.name && <span>{report.connection.name}</span>}
+          <div className="d-flex align-items-center gap-2 flex-wrap mt-2">
             {(report.workspaceName || report.workspace?.name) && (
-              <span>
-                <i className="fa-solid fa-briefcase me-1"></i>
-                {report.workspaceName || report.workspace?.name}
-              </span>
+              <Link
+                to={`/workspaces/${report.workspaceId || report.workspace?.id || ''}`}
+                className="btn btn-outline-secondary btn-sm"
+              >
+                Open workspace
+              </Link>
             )}
             {(report.datasetName || report.dataset?.name) && (
-              <span>
-                <i className="fa-solid fa-cubes me-1"></i>
-                {report.datasetName || report.dataset?.name}
-              </span>
+              <Link
+                to={`/datasets/${report.datasetId || report.dataset?.id || ''}`}
+                className="btn btn-outline-secondary btn-sm"
+              >
+                Open dataset
+              </Link>
+            )}
+            {report.category && (
+              <Link to={`/catalog?category=${report.category.id}`} className="btn btn-outline-secondary btn-sm">
+                More in category
+              </Link>
             )}
             {report.tags?.slice(0, 2).map(t => (
-              <span key={t} className="badge bg-light text-secondary border" style={{ fontSize: '0.65rem' }}>
+              <span key={t} className="badge bg-light text-secondary border">
                 #{t}
               </span>
             ))}
@@ -275,7 +324,7 @@ function ReportListItem({ report, onFavorite }: ReportListItemProps) {
         </div>
 
         {/* Right side actions */}
-        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+        <div className="d-flex align-items-center gap-2 flex-shrink-0 pt-1">
           <span className="text-muted d-none d-sm-block" style={{ fontSize: '0.75rem' }}>
             <i className="fa-solid fa-play me-1" style={{ fontSize: '0.65rem' }} />
             {report.executionCount ?? 0} runs
@@ -293,8 +342,8 @@ function ReportListItem({ report, onFavorite }: ReportListItemProps) {
           >
             <i className={`fa-${report.isFavorite ? 'solid' : 'regular'} fa-heart`} />
           </button>
-          <Link to={`/reports/${report.id}/edit`} className="btn btn-outline-secondary btn-sm">
-            <i className="fa-solid fa-pen" />
+          <Link to={`/reports/${report.id}`} className="btn btn-outline-primary btn-sm">
+            Open
           </Link>
         </div>
       </div>
@@ -353,6 +402,7 @@ export function CatalogPage() {
   useAuthStore();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { canCreateReports } = usePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // ── State derived from URL params + local ──────────────────────────────────
@@ -362,7 +412,7 @@ export function CatalogPage() {
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') ?? '');
   const [tagFilter, setTagFilter] = useState(searchParams.get('tag') ?? '');
   const [workspaceFilter, setWorkspaceFilter] = useState(searchParams.get('workspaceId') ?? '');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [filterScope, setFilterScope] = useState<FilterScope>((searchParams.get('scope') as FilterScope) ?? 'all');
   const [sortBy, setSortBy] = useState<SortOption>((searchParams.get('sort') as SortOption) ?? 'newest');
   const [page, setPage] = useState(1);
@@ -434,6 +484,22 @@ export function CatalogPage() {
     },
   });
 
+  const { data: datasets } = useQuery({
+    queryKey: ['catalog', 'enterprise', 'datasets'],
+    queryFn: async () => {
+      const res = await api.get<{ items: import('../../lib/api/types').Dataset[] }>('/datasets', { params: { pageSize: 200 } });
+      return res.data.items;
+    },
+  });
+
+  const { data: refreshJobs } = useQuery({
+    queryKey: ['catalog', 'enterprise', 'refresh-jobs'],
+    queryFn: async () => {
+      const res = await api.get<{ items: import('../../lib/api/types').RefreshJob[] }>('/refresh-jobs', { params: { pageSize: 200 } });
+      return res.data.items;
+    },
+  });
+
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const favoriteMutation = useMutation({
@@ -469,6 +535,7 @@ export function CatalogPage() {
   const total = reportsData?.total ?? 0;
   const totalPages = reportsData?.totalPages ?? 1;
   const hasActiveFilters = !!(debouncedSearch || categoryFilter || tagFilter || workspaceFilter || filterScope !== 'all');
+  const enterpriseSummary = buildEnterpriseSummary(datasets ?? [], reports, refreshJobs ?? []);
 
   const activeCategoryName = categories?.find(c => c.id === categoryFilter)?.name;
   const activeWorkspaceName = workspaces?.find(w => w.id === workspaceFilter)?.name;
@@ -499,10 +566,72 @@ export function CatalogPage() {
             )}
           </p>
         </div>
-        <Link to="/reports/new" className="btn btn-primary">
-          <i className="fa-solid fa-plus me-2" />
-          New Report
-        </Link>
+        {canCreateReports && (
+          <Link to="/reports/new" className="btn btn-primary">
+            <i className="fa-solid fa-plus me-2" />
+            New Report
+          </Link>
+        )}
+      </div>
+
+      <div className="card border-0 shadow-sm mb-3">
+        <div className="card-body py-3">
+          <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+            <div className="min-width-0">
+              <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Report hub</div>
+              <div className="fw-semibold">Find the report first, then open its workspace, dataset, or governance context.</div>
+              <div className="text-muted small">Catalog entries should be dense, direct, and easy to drill through.</div>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <Link to="/reports/new" className="btn btn-primary btn-sm">
+                <i className="fa-solid fa-plus me-1" />
+                New report
+              </Link>
+              <Link to="/workspaces" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-briefcase me-1" />
+                Workspaces
+              </Link>
+              <Link to="/dashboards" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-gauge-high me-1" />
+                Dashboards
+              </Link>
+              <Link to="/enterprise" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-compass-drafting me-1" />
+                Governance
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="row g-3 mb-4">
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Signals</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.staleDatasets.length}</div>
+              <div className="text-muted small">stale datasets</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Refresh health</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.failedJobs.length}</div>
+              <div className="text-muted small">failed refresh jobs</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Ontology</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.ontology.termCount}</div>
+              <div className="text-muted small">governed terms</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="row g-4">
@@ -876,10 +1005,12 @@ export function CatalogPage() {
                       Clear filters
                     </button>
                   )}
-                  <Link to="/reports/new" className="btn btn-primary">
-                    <i className="fa-solid fa-plus me-2" />
-                    Create report
-                  </Link>
+                  {canCreateReports && (
+                    <Link to="/reports/new" className="btn btn-primary">
+                      <i className="fa-solid fa-plus me-2" />
+                      Create report
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

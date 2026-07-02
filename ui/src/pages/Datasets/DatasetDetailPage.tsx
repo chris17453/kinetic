@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { ConnectionType, Dataset, DatasetField, RefreshJob, RefreshSchedule, Report } from '../../lib/api/types';
 import { Breadcrumb, useToast } from '../../components/common';
+import { buildEnterpriseSummary } from '../../lib/enterprise/enterpriseSummary';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface PreviewColumn {
   name: string;
@@ -24,6 +26,8 @@ export function DatasetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { canCreateReports, canManageReports, canCreateConnections, canManageConnections, canUploadData } = usePermissions();
+  const canManageDataset = canCreateReports || canManageReports || canCreateConnections || canManageConnections || canUploadData;
   const [generatedQuery, setGeneratedQuery] = useState('');
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [certificationNotes, setCertificationNotes] = useState('');
@@ -203,6 +207,7 @@ export function DatasetDetailPage() {
   const dimensions = useMemo(() => dataset?.fields.filter(field => field.kind === 'Dimension') ?? [], [dataset]);
   const measureFields = useMemo(() => dataset?.fields.filter(field => field.kind === 'Measure') ?? [], [dataset]);
   const calculatedFields = useMemo(() => dataset?.fields.filter(field => field.kind === 'CalculatedColumn') ?? [], [dataset]);
+  const enterpriseSummary = buildEnterpriseSummary(dataset ? [dataset] : [], reports, refreshJobs);
 
   if (isLoading) {
     return (
@@ -226,7 +231,7 @@ export function DatasetDetailPage() {
     <div>
       <div className="d-flex align-items-start justify-content-between gap-3 mb-3">
         <div>
-          <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Datasets', path: '/datasets' }, { label: dataset.name }]} />
+          <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Datasets', path: '/datasets' }, { label: dataset.name }]} />
           <h4 className="fw-bold mb-1">
             {dataset.name}
             {dataset.isCertified && <i className="fa-solid fa-circle-check text-success ms-2" title="Certified"></i>}
@@ -234,30 +239,91 @@ export function DatasetDetailPage() {
           <p className="text-muted small mb-0">{dataset.description || 'Curated semantic dataset'}</p>
         </div>
         <div className="d-flex gap-2">
-          <button className="btn btn-outline-primary" onClick={() => queueRefreshMutation.mutate()} disabled={queueRefreshMutation.isPending}>
-            <i className="fa-solid fa-rotate me-1"></i>
-            Queue Refresh
-          </button>
-          <button
-            className="btn btn-outline-primary"
-            onClick={() => previewMutation.mutate()}
-            disabled={previewMutation.isPending || !dataset.connectionId || (!dataset.sourceQuery && !dataset.sourceTable)}
-          >
-            <i className="fa-solid fa-table me-1"></i>
-            Preview Rows
-          </button>
-          <button
-            className="btn btn-outline-secondary"
-            onClick={() => inspectMutation.mutate()}
-            disabled={inspectMutation.isPending || !dataset.connectionId || !dataset.sourceTable}
-          >
-            <i className="fa-solid fa-wand-magic-sparkles me-1"></i>
-            Inspect Source
-          </button>
-          <button className="btn btn-primary" onClick={() => semanticQueryMutation.mutate()} disabled={semanticQueryMutation.isPending}>
-            <i className="fa-solid fa-code me-1"></i>
-            Generate SQL
-          </button>
+          {dataset.workspaceId && (
+            <Link to={`/workspaces/${dataset.workspaceId}`} className="btn btn-outline-secondary">
+              <i className="fa-solid fa-briefcase me-1"></i>
+              Open workspace
+            </Link>
+          )}
+          {dataset.connectionId && (
+            <Link to={`/connections/${dataset.connectionId}`} className="btn btn-outline-secondary">
+              <i className="fa-solid fa-plug me-1"></i>
+              Open connection
+            </Link>
+          )}
+          {canManageDataset && (
+            <button className="btn btn-outline-primary" onClick={() => queueRefreshMutation.mutate()} disabled={queueRefreshMutation.isPending}>
+              <i className="fa-solid fa-rotate me-1"></i>
+              Queue Refresh
+            </button>
+          )}
+          {canManageDataset && (
+            <button
+              className="btn btn-outline-primary"
+              onClick={() => previewMutation.mutate()}
+              disabled={previewMutation.isPending || !dataset.connectionId || (!dataset.sourceQuery && !dataset.sourceTable)}
+            >
+              <i className="fa-solid fa-table me-1"></i>
+              Preview Rows
+            </button>
+          )}
+          {canManageDataset && (
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => inspectMutation.mutate()}
+              disabled={inspectMutation.isPending || !dataset.connectionId || !dataset.sourceTable}
+            >
+              <i className="fa-solid fa-wand-magic-sparkles me-1"></i>
+              Inspect Source
+            </button>
+          )}
+          {canManageDataset && (
+            <button className="btn btn-primary" onClick={() => semanticQueryMutation.mutate()} disabled={semanticQueryMutation.isPending}>
+              <i className="fa-solid fa-code me-1"></i>
+              Generate SQL
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="row g-3 mb-4">
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Signals</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.failedJobs.length}</div>
+              <div className="text-muted small">failed refresh jobs</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Freshness</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.staleDatasets.length}</div>
+              <div className="text-muted small">stale datasets</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Ontology</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.ontology.termCount}</div>
+              <div className="text-muted small">business terms</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Enterprise center</div>
+              <div className="fw-semibold">Signals + ontology</div>
+              <div className="text-muted small">
+                <Link to="/enterprise" className="text-decoration-none">Open governance hub</Link>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -317,6 +383,7 @@ export function DatasetDetailPage() {
         <Stat label="Relationships" value={dataset.semanticModel?.relationships?.length ?? 0} icon="fa-link" />
       </div>
 
+      {canManageDataset && (
       <div className="card border-0 shadow-sm mb-3">
         <div className="card-header bg-white py-3 d-flex align-items-center justify-content-between gap-3">
           <h6 className="fw-bold mb-0">
@@ -327,8 +394,8 @@ export function DatasetDetailPage() {
             {dataset.isCertified ? 'Certified' : 'Uncertified'}
           </span>
         </div>
-        <div className="card-body">
-          <div className="row g-3 align-items-end">
+          <div className="card-body">
+            <div className="row g-3 align-items-end">
             <div className="col-lg-8">
               <label className="form-label fw-medium">Notes</label>
               <textarea
@@ -365,9 +432,16 @@ export function DatasetDetailPage() {
                 </button>
               )}
             </div>
+            <div className="mt-3">
+              <Link to={`/datasets/${dataset.id}/ontology`} className="btn btn-outline-primary btn-sm">
+                <i className="fa-solid fa-diagram-project me-1"></i>
+                Open ontology editor
+              </Link>
+            </div>
           </div>
         </div>
       </div>
+      )}
 
       <div className="row g-3 mb-3">
         <div className="col-xl-4">
@@ -376,10 +450,26 @@ export function DatasetDetailPage() {
               <h6 className="fw-bold mb-0">Lineage</h6>
             </div>
             <div className="card-body">
-              <LineageStep icon="fa-briefcase" label="Workspace" value={dataset.workspaceName || dataset.workspace?.name || 'Global'} />
-              <LineageStep icon="fa-server" label="Connection" value={dataset.connectionName || dataset.connection?.name || 'No connection'} />
+              <LineageStep
+                icon="fa-briefcase"
+                label="Workspace"
+                value={dataset.workspaceName || dataset.workspace?.name || 'Global'}
+                href={dataset.workspaceId ? `/workspaces/${dataset.workspaceId}` : undefined}
+              />
+              <LineageStep
+                icon="fa-server"
+                label="Connection"
+                value={dataset.connectionName || dataset.connection?.name || 'No connection'}
+                href={dataset.connectionId ? `/connections/${dataset.connectionId}` : undefined}
+              />
               <LineageStep icon="fa-cubes" label="Dataset" value={dataset.name} />
-              <LineageStep icon="fa-chart-bar" label="Reports" value={`${reports.length} linked`} last />
+              <LineageStep
+                icon="fa-chart-bar"
+                label="Reports"
+                value={`${reports.length} linked`}
+                href={reports.length > 0 ? `/reports/${reports[0].id}` : undefined}
+                last
+              />
             </div>
           </div>
         </div>
@@ -443,8 +533,13 @@ export function DatasetDetailPage() {
                 <div className="list-group list-group-flush">
                   {reports.map(report => (
                     <Link className="list-group-item list-group-item-action px-0" key={report.id} to={`/reports/${report.id}`}>
-                      <div className="fw-semibold">{report.name}</div>
-                      <div className="text-muted small">{report.visibility} · {report.executionCount ?? 0} runs</div>
+                      <div className="d-flex align-items-center justify-content-between gap-3">
+                        <div className="min-width-0">
+                          <div className="fw-semibold text-truncate">{report.name}</div>
+                          <div className="text-muted small text-truncate">{report.visibility} · {report.executionCount ?? 0} runs</div>
+                        </div>
+                        <span className="badge text-bg-light border flex-shrink-0">Open</span>
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -454,6 +549,7 @@ export function DatasetDetailPage() {
         </div>
       </div>
 
+      {canManageDataset && (
       <div className="card border-0 shadow-sm mt-3">
         <div className="card-header bg-white py-3 d-flex align-items-center justify-content-between">
           <h6 className="fw-bold mb-0">
@@ -564,6 +660,7 @@ export function DatasetDetailPage() {
           )}
         </div>
       </div>
+      )}
 
       <div className="card border-0 shadow-sm mt-3">
         <div className="card-header bg-white py-3 d-flex align-items-center justify-content-between">
@@ -752,7 +849,7 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LineageStep({ icon, label, value, last }: { icon: string; label: string; value: string; last?: boolean }) {
+function LineageStep({ icon, label, value, href, last }: { icon: string; label: string; value: string; href?: string; last?: boolean }) {
   return (
     <div className="d-flex gap-3">
       <div className="d-flex flex-column align-items-center">
@@ -763,7 +860,13 @@ function LineageStep({ icon, label, value, last }: { icon: string; label: string
       </div>
       <div className="pb-3 min-width-0">
         <div className="text-muted small">{label}</div>
-        <div className="fw-semibold text-truncate">{value}</div>
+        {href ? (
+          <Link to={href} className="fw-semibold text-truncate text-decoration-none">
+            {value}
+          </Link>
+        ) : (
+          <div className="fw-semibold text-truncate">{value}</div>
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuthStore } from '../../stores/authStore';
+import { useBrandingStore } from '../../stores/brandingStore';
 
 const registerSchema = z.object({
   displayName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -39,6 +40,7 @@ export function RegisterPage() {
   const navigate = useNavigate();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { register: registerUser, isLoading } = useAuthStore() as any;
+  const { branding } = useBrandingStore();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
@@ -53,6 +55,8 @@ export function RegisterPage() {
   const metCount = strengthCriteria.filter(c => c.test(password)).length;
   const strengthColor = STRENGTH_COLOR[metCount] ?? 'danger';
   const strengthLabel = STRENGTH_LABEL[metCount] ?? 'Weak';
+  const primaryColor = branding?.primaryColor || '#2563EB';
+  const orgName = branding?.orgName || 'Enterprise';
 
   const onSubmit = async (data: RegisterFormValues) => {
     setServerError(null);
@@ -71,15 +75,30 @@ export function RegisterPage() {
         className="d-none d-lg-flex flex-column align-items-center justify-content-center text-white p-5"
         style={{
           width: '42%',
-          background: 'linear-gradient(135deg, #0d6efd 0%, #6610f2 100%)',
+          background: `linear-gradient(135deg, ${primaryColor} 0%, #6610f2 100%)`,
           flexShrink: 0,
         }}
       >
-        <img src="/logo.svg" alt="Kinetic" width={72} height={72} className="mb-4" />
-        <h2 className="fw-bold mb-3">Kinetic Reports</h2>
+        {branding?.useTextLogo ? (
+          <span
+            className="mb-4"
+            style={{
+              fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+              fontSize: branding.logoTextSize || '1.5rem',
+              color: '#fff',
+              fontWeight: 700,
+            }}
+          >
+            {branding.logoText || orgName}
+          </span>
+        ) : branding?.logoUrl ? (
+          <img src={branding.logoUrl} alt={orgName} width={72} height={72} className="mb-4" />
+        ) : (
+          <img src="/logo.svg" alt={orgName} width={72} height={72} className="mb-4" />
+        )}
+        <h2 className="fw-bold mb-3">{orgName}</h2>
         <p className="text-white-50 text-center mb-5" style={{ maxWidth: 320 }}>
-          Build powerful data reports, share insights across your organisation, and make decisions
-          faster.
+          Build enterprise dashboards, govern shared metrics, and make faster decisions with trusted analytics.
         </p>
         <ul className="list-unstyled text-white-50 small">
           <li className="mb-2">
@@ -99,6 +118,7 @@ export function RegisterPage() {
             Microsoft Entra ID support
           </li>
         </ul>
+        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} {orgName}</p>
       </div>
 
       {/* Right form panel */}
@@ -106,12 +126,27 @@ export function RegisterPage() {
         <div style={{ width: '100%', maxWidth: 460 }}>
           {/* Mobile logo (shown only when left panel is hidden) */}
           <div className="d-lg-none text-center mb-4">
-            <img src="/logo.svg" alt="Kinetic" width={48} height={48} />
+            {branding?.useTextLogo ? (
+              <span
+                style={{
+                  fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                  fontSize: branding.logoTextSize || '1.5rem',
+                  color: branding.logoTextColor || primaryColor,
+                  fontWeight: 700,
+                }}
+              >
+                {branding.logoText || orgName}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={orgName} width={48} height={48} />
+            ) : (
+              <img src="/logo.svg" alt={orgName} width={48} height={48} />
+            )}
           </div>
 
           <div className="mb-4">
             <h3 className="fw-bold mb-1">Create your account</h3>
-            <p className="text-muted mb-0">Get started with Kinetic Reports</p>
+            <p className="text-muted mb-0">Get started with your enterprise workspace</p>
           </div>
 
           <div className="card border-0 shadow-sm">

@@ -7,7 +7,7 @@ import { useToast, Breadcrumb } from '../../components/common';
 const MAX_FILE_SIZE_MB = 100;
 
 const BREADCRUMBS = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Home', path: '/' },
   { label: 'Data Upload' },
 ];
 

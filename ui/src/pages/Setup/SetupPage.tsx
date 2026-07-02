@@ -111,7 +111,7 @@ export function SetupPage() {
   // Forms
   const dbForm = useForm<DatabaseValues>({
     resolver: zodResolver(databaseSchema),
-    defaultValues: { connectionString: 'Server=localhost;Database=Kinetic;User Id=sa;Password=Kinetic@Dev123!;TrustServerCertificate=True' },
+    defaultValues: { connectionString: 'Server=localhost;Database=Enterprise;User Id=sa;Password=Enterprise@Dev123!;TrustServerCertificate=True' },
   });
   const rmqForm = useForm<RabbitMqValues>({
     resolver: zodResolver(rabbitMqSchema),
@@ -127,7 +127,7 @@ export function SetupPage() {
   });
   const smtpForm = useForm<SmtpValues>({
     resolver: zodResolver(smtpSchema),
-    defaultValues: { host: '', port: 587, useSsl: true, username: '', password: '', fromAddress: '', fromName: 'Kinetic' },
+    defaultValues: { host: '', port: 587, useSsl: true, username: '', password: '', fromAddress: '', fromName: 'Enterprise Control Plane' },
   });
   const adminForm = useForm<AdminValues>({ resolver: zodResolver(adminSchema) });
 
@@ -309,13 +309,13 @@ export function SetupPage() {
       >
         <div className="d-flex align-items-center gap-2">
           <i className="fa-solid fa-bolt-lightning fa-lg"></i>
-          <span className="fw-bold fs-4">Kinetic</span>
+          <span className="fw-bold fs-4">Enterprise control plane</span>
         </div>
         <div>
-          <h2 className="fw-bold display-6 mb-3">Welcome to Kinetic</h2>
+          <h2 className="fw-bold display-6 mb-3">Welcome to the enterprise control plane</h2>
           <p className="opacity-75 mb-4">
-            Let's get your reporting platform configured. This wizard will walk you through connecting
-            your infrastructure and creating your admin account.
+            Let&apos;s get your analytics platform configured. This wizard will walk you through connecting
+            your infrastructure and creating the first admin account.
           </p>
 
           {/* Progress */}
@@ -342,7 +342,7 @@ export function SetupPage() {
             })}
           </div>
         </div>
-        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} Kinetic Reports</p>
+        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} Enterprise control plane</p>
       </div>
 
       {/* Right panel */}
@@ -351,7 +351,7 @@ export function SetupPage() {
           {/* Mobile header */}
           <div className="d-lg-none text-center mb-4">
             <i className="fa-solid fa-bolt-lightning fa-2x text-primary mb-2"></i>
-            <h5 className="fw-bold mb-1">Kinetic Setup</h5>
+            <h5 className="fw-bold mb-1">Enterprise setup</h5>
             <p className="text-muted small">Step {effectiveStep + 1} of {visibleSteps.length}</p>
           </div>
 
@@ -362,11 +362,11 @@ export function SetupPage() {
                 <div className="mb-3">
                   <i className="fa-solid fa-circle-check text-success" style={{ fontSize: 48 }}></i>
                 </div>
-                <h4 className="fw-bold mb-2">Setup Complete!</h4>
+                <h4 className="fw-bold mb-2">Setup complete</h4>
                 {isAdminOnly ? (
                   <>
                     <p className="text-muted mb-4">
-                      Your admin account has been created. You can now sign in.
+                      Your admin account has been created. You can now sign in to the enterprise workspace.
                     </p>
                     <button className="btn btn-primary fw-semibold" onClick={() => navigate('/login', { replace: true })}>
                       <i className="fa-solid fa-right-to-bracket me-2"></i>
@@ -376,7 +376,7 @@ export function SetupPage() {
                 ) : (
                   <>
                     <p className="text-muted mb-4">
-                      Configuration has been saved and the database has been initialized.
+                      Configuration has been saved and the platform has been initialized.
                       The application is restarting — you'll be redirected to the login page shortly.
                     </p>
                     <div className="spinner-border text-primary" role="status">
@@ -524,7 +524,7 @@ function DatabaseStep({ form, testResult, testing, onTest }: { form: any; testRe
         <textarea
           className={`form-control font-monospace small${form.formState.errors.connectionString ? ' is-invalid' : ''}`}
           rows={3}
-          placeholder="Server=localhost;Database=Kinetic;User Id=sa;Password=...;TrustServerCertificate=True"
+          placeholder="Server=localhost;Database=Enterprise;User Id=sa;Password=...;TrustServerCertificate=True"
           autoComplete="off"
           {...form.register('connectionString')}
         />
@@ -654,7 +654,7 @@ function SmtpStep({ form, testResult, testing, onTest }: { form: any; testResult
           <input
             type="text"
             className="form-control"
-            placeholder="Kinetic"
+            placeholder="Enterprise Control Plane"
             {...form.register('fromName')}
           />
         </div>

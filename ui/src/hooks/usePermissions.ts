@@ -22,6 +22,12 @@ export const PERMISSIONS = {
   ADMIN_USERS: 'admin.users',
   ADMIN_GROUPS: 'admin.groups',
   ADMIN_AUDIT: 'admin.audit',
+  ADMIN_SYSTEM: 'admin.system',
+
+  // Enterprise
+  ORG_MANAGE: 'org:manage',
+  ORG_BRANDING: 'org:branding',
+  ORG_SETTINGS: 'org:settings',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -67,7 +73,27 @@ export function usePermissions() {
   const canManageUsers = hasPermission(PERMISSIONS.ADMIN_USERS);
   const canManageGroups = hasPermission(PERMISSIONS.ADMIN_GROUPS);
   const canViewAudit = hasPermission(PERMISSIONS.ADMIN_AUDIT);
-  const isAdmin = canManageUsers || canManageGroups;
+  const canManageSystem = hasPermission(PERMISSIONS.ADMIN_SYSTEM);
+  const canManageEnterprise = hasAnyPermission([
+    PERMISSIONS.ORG_MANAGE,
+    PERMISSIONS.ORG_BRANDING,
+    PERMISSIONS.ORG_SETTINGS,
+    PERMISSIONS.ADMIN_SYSTEM,
+  ]);
+  const canViewEnterpriseCenter = hasAnyPermission([
+    PERMISSIONS.ORG_MANAGE,
+    PERMISSIONS.ORG_BRANDING,
+    PERMISSIONS.ORG_SETTINGS,
+    PERMISSIONS.ADMIN_USERS,
+    PERMISSIONS.ADMIN_GROUPS,
+    PERMISSIONS.ADMIN_AUDIT,
+    PERMISSIONS.ADMIN_SYSTEM,
+    PERMISSIONS.REPORTS_MANAGE,
+    PERMISSIONS.CONNECTIONS_MANAGE,
+    PERMISSIONS.CATALOG_ASSIGN,
+    PERMISSIONS.UPLOAD_DATA,
+  ]);
+  const isAdmin = canManageUsers || canManageGroups || canViewAudit || canManageEnterprise;
 
   return {
     permissions: userPermissions,
@@ -85,6 +111,9 @@ export function usePermissions() {
     canManageUsers,
     canManageGroups,
     canViewAudit,
+    canManageSystem,
+    canManageEnterprise,
+    canViewEnterpriseCenter,
     isAdmin,
   };
 }

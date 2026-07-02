@@ -89,6 +89,7 @@ public class AuthService : IAuthService
         var user = await _db.Users
             .Include(u => u.UserGroups)
             .ThenInclude(ug => ug.Group)
+            .ThenInclude(g => g!.Permissions)
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Email == request.Email.ToLowerInvariant());
 
@@ -163,6 +164,7 @@ public class AuthService : IAuthService
         var user = await _db.Users
             .Include(u => u.UserGroups)
             .ThenInclude(ug => ug.Group)
+            .ThenInclude(g => g!.Permissions)
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u =>
                 (u.Provider == provider && u.ExternalId == request.ExternalId) ||
@@ -257,6 +259,7 @@ public class AuthService : IAuthService
         return await _db.Users
             .Include(u => u.UserGroups)
             .ThenInclude(ug => ug.Group)
+            .ThenInclude(g => g!.Permissions)
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Id == userId);
     }
@@ -266,6 +269,7 @@ public class AuthService : IAuthService
         return await _db.Users
             .Include(u => u.UserGroups)
             .ThenInclude(ug => ug.Group)
+            .ThenInclude(g => g!.Permissions)
             .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Email == email.ToLowerInvariant());
     }

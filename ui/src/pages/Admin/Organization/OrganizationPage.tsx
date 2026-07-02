@@ -73,7 +73,7 @@ const defaultBranding: OrganizationBranding = {
   loginBackgroundUrl: '',
   dashboardBackgroundUrl: '',
   useTextLogo: false,
-  logoText: 'Kinetic',
+  logoText: 'Enterprise',
   logoTextFont: 'Inter, system-ui, sans-serif',
   logoTextSize: '1.5rem',
   logoTextColor: '#3B82F6',
@@ -183,7 +183,7 @@ const SettingSwitch = ({ id, label, description, checked, onChange }: SettingSwi
 export function OrganizationPage() {
   const [branding, setBranding] = useState<OrganizationBranding>(defaultBranding);
   const [settings, setSettings] = useState<OrganizationSettings>(defaultSettings);
-  const [orgName, setOrgName] = useState('Kinetic');
+  const [orgName, setOrgName] = useState('Enterprise Control Plane');
   const [orgSlug, setOrgSlug] = useState('default');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -201,7 +201,7 @@ export function OrganizationPage() {
           api.get('/organizations/settings'),
         ]);
         const b = brandingRes.data;
-        setOrgName(b.orgName || 'Kinetic');
+        setOrgName(b.orgName || 'Enterprise Control Plane');
         setOrgSlug(b.orgSlug || 'default');
         setBranding({
           logoUrl: b.logoUrl || '',
@@ -211,7 +211,7 @@ export function OrganizationPage() {
           loginBackgroundUrl: b.loginBackgroundUrl || '',
           dashboardBackgroundUrl: b.dashboardBackgroundUrl || '',
           useTextLogo: b.useTextLogo || false,
-          logoText: b.logoText || 'Kinetic',
+          logoText: b.logoText || b.orgName || 'Enterprise',
           logoTextFont: b.logoTextFont || 'Inter, system-ui, sans-serif',
           logoTextSize: b.logoTextSize || '1.5rem',
           logoTextColor: b.logoTextColor || '#3B82F6',
@@ -285,12 +285,28 @@ export function OrganizationPage() {
   return (
     <div className="container py-4">
       {/* Header */}
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Organization Settings</h1>
-          <p className="text-muted mb-0">Configure branding, themes, and organization-wide settings</p>
+      <div className="card border-0 shadow-sm mb-4 overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #38bdf8 100%)' }}>
+        <div className="card-body p-4 p-lg-5 text-white">
+          <div className="d-flex flex-column flex-lg-row gap-4 align-items-lg-end justify-content-between">
+            <div className="min-width-0">
+              <div className="text-uppercase fw-semibold small mb-2" style={{ letterSpacing: '0.18em', opacity: 0.85 }}>
+                Enterprise control plane
+              </div>
+              <h1 className="h3 fw-bold mb-1">Organization Settings</h1>
+              <p className="mb-0" style={{ maxWidth: 760, opacity: 0.9 }}>
+                Configure branding, themes, permissions defaults, and organization-wide settings for the enterprise BI experience.
+              </p>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <span className="badge text-bg-light text-dark">Branding</span>
+              <span className="badge text-bg-light text-dark">Permissions</span>
+              <span className="badge text-bg-light text-dark">Executive-ready UI</span>
+            </div>
+          </div>
         </div>
-        <div className="d-flex gap-2">
+      </div>
+
+      <div className="d-flex justify-content-end gap-2 mb-4">
           <button
             className="btn btn-outline-secondary"
             onClick={() => setPreviewMode(m => m === 'light' ? 'dark' : 'light')}
@@ -303,7 +319,6 @@ export function OrganizationPage() {
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
-      </div>
 
       {/* Organization Info */}
       <div className="card mb-4">
@@ -412,7 +427,7 @@ export function OrganizationPage() {
                         className="form-control"
                         value={branding.logoText}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranding({ ...branding, logoText: e.target.value })}
-                        placeholder="Kinetic"
+                        placeholder="Enterprise"
                       />
                     </div>
                     <div className="col-md-4">
@@ -459,7 +474,7 @@ export function OrganizationPage() {
                             color: branding.logoTextColor,
                             fontWeight: 700,
                           }}>
-                            {branding.logoText || 'Kinetic'}
+                            {branding.logoText || orgName || 'Enterprise'}
                           </span>
                         </div>
                         <div className="border rounded p-3" style={{ background: '#1E293B' }}>
@@ -469,7 +484,7 @@ export function OrganizationPage() {
                             color: branding.logoTextDarkColor,
                             fontWeight: 700,
                           }}>
-                            {branding.logoText || 'Kinetic'}
+                            {branding.logoText || orgName || 'Enterprise'}
                           </span>
                         </div>
                       </div>
@@ -687,12 +702,12 @@ export function OrganizationPage() {
                   }}>
                     This is how your content will look with the selected theme.
                   </p>
-                  <div className="d-flex gap-2">
-                    <button
-                      className="btn btn-sm text-white"
-                      style={{ backgroundColor: previewMode === 'light' ? branding.primaryColor : branding.darkPrimaryColor }}
-                    >
-                      Primary Button
+                <div className="d-flex gap-2 flex-wrap">
+                  <button
+                    className="btn btn-sm text-white"
+                    style={{ backgroundColor: previewMode === 'light' ? branding.primaryColor : branding.darkPrimaryColor }}
+                  >
+                    Primary Button
                     </button>
                     <button
                       className="btn btn-sm text-white"
@@ -700,16 +715,21 @@ export function OrganizationPage() {
                     >
                       Secondary
                     </button>
-                    <button
-                      className="btn btn-sm text-white"
-                      style={{ backgroundColor: previewMode === 'light' ? branding.accentColor : branding.darkAccentColor }}
-                    >
-                      Accent
-                    </button>
-                  </div>
+                  <button
+                    className="btn btn-sm text-white"
+                    style={{ backgroundColor: previewMode === 'light' ? branding.accentColor : branding.darkAccentColor }}
+                  >
+                    Accent
+                  </button>
                 </div>
+                <div className="d-flex flex-wrap gap-2 mt-3">
+                  <span className="badge text-bg-light text-dark">Signals-ready branding</span>
+                  <span className="badge text-bg-light text-dark">Executive dashboard shell</span>
+                  <span className="badge text-bg-light text-dark">Enterprise reports</span>
+                </div>
+              </div>
 
-                <div className="d-flex gap-2">
+              <div className="d-flex gap-2">
                   <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.successColor }}>Success</span>
                   <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.warningColor }}>Warning</span>
                   <span className="badge text-white px-3 py-2" style={{ backgroundColor: branding.errorColor }}>Error</span>

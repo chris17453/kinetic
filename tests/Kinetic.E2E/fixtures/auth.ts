@@ -1,5 +1,5 @@
 import { APIRequestContext, expect, Page } from '@playwright/test';
-import { randomUUID } from 'crypto';
+import { buildDemoWorkspacePack } from './demoWorkspacePack';
 
 export interface E2EUser {
   email: string;
@@ -15,6 +15,7 @@ export interface SeededContent {
   dataset: ApiEntity;
   dashboard: ApiEntity;
   report: ApiEntity;
+  demoReports: ApiEntity[];
   refreshJob: ApiEntity;
   refreshSchedule: ApiEntity;
 }
@@ -56,48 +57,121 @@ export async function loginThroughUi(page: Page, user: E2EUser) {
 
 export async function seedContent(request: APIRequestContext, user: E2EUser): Promise<SeededContent> {
   const suffix = user.email.split('@')[0];
-  const workspace = await apiPost<ApiEntity>(request, user.token, '/workspaces', {
-    name: `E2E Workspace ${suffix}`,
-    description: 'Seeded by Playwright',
-    visibility: 'Private',
-  });
+  const pack = buildDemoWorkspacePack(suffix);
+
+  const workspace = await apiPost<ApiEntity>(request, user.token, '/workspaces', pack.workspace);
 
   const connection = await apiPost<ApiEntity>(request, user.token, '/connections', {
-    name: `E2E SQLite ${suffix}`,
-    description: 'Seeded by Playwright',
-    type: 'SQLite',
-    connectionString: 'Data Source=:memory:',
+    ...pack.connection,
     workspaceId: workspace.id,
-    visibility: 'Private',
   });
 
   const dataset = await apiPost<ApiEntity>(request, user.token, '/datasets', {
-    name: `E2E Dataset ${suffix}`,
-    description: 'Seeded by Playwright',
+    ...pack.dataset,
     workspaceId: workspace.id,
     connectionId: connection.id,
-    sourceType: 'Query',
-    sourceQuery: "select 1 as total_sales, 'North' as region",
-    visibility: 'Private',
     fields: [],
     tables: [],
   });
 
+  const [report, operationsReport, analyticsReport, financeReport, governanceReport] = await Promise.all(pack.reports.map((reportPack) =>
+    apiPost<ApiEntity>(request, user.token, '/reports', {
+      name: reportPack.name,
+      description: reportPack.description,
+      workspaceId: workspace.id,
+      datasetId: dataset.id,
+      connectionId: connection.id,
+      queryText: reportPack.queryText,
+      executionMode: 'Auto',
+      cacheMode: 'Live',
+      visibility: 'Private',
+      allowEmbed: true,
+      tags: reportPack.tags,
+      columns: reportPack.columns,
+      visualizations: reportPack.visualizations,
+    })
+  ));
+
   const dashboard = await apiPost<ApiEntity>(request, user.token, '/dashboards', {
-    name: `E2E Dashboard ${suffix}`,
-    description: 'Seeded by Playwright',
+    name: pack.dashboard.name,
+    description: pack.dashboard.description,
     workspaceId: workspace.id,
     visibility: 'Private',
     widgets: [
       {
-        id: 'e2e-revenue-card',
-        type: 'Kpi',
-        title: 'Revenue YTD',
+        id: 'e2e-exec-report',
+        type: 'ReportVisual',
+        title: 'Executive Demo Report',
         x: 0,
         y: 0,
         width: 4,
+        height: 3,
+        reportId: report.id,
+        config: { reportName: report.name },
+      },
+      {
+        id: 'e2e-ops-report',
+        type: 'ReportVisual',
+        title: 'Operations Demo Report',
+        x: 4,
+        y: 0,
+        width: 4,
+        height: 3,
+        reportId: operationsReport.id,
+        config: { reportName: operationsReport.name },
+      },
+      {
+        id: 'e2e-analytics-report',
+        type: 'ReportVisual',
+        title: 'Analytics Demo Report',
+        x: 8,
+        y: 0,
+        width: 4,
+        height: 3,
+        reportId: analyticsReport.id,
+        config: { reportName: analyticsReport.name },
+      },
+      {
+        id: 'e2e-finance-report',
+        type: 'ReportVisual',
+        title: 'Finance Demo Report',
+        x: 0,
+        y: 5,
+        width: 4,
+        height: 3,
+        reportId: financeReport.id,
+        config: { reportName: financeReport.name },
+      },
+      {
+        id: 'e2e-governance-report',
+        type: 'ReportVisual',
+        title: 'Governance Demo Report',
+        x: 4,
+        y: 5,
+        width: 4,
+        height: 3,
+        reportId: governanceReport.id,
+        config: { reportName: governanceReport.name },
+      },
+      {
+        id: 'e2e-kpi',
+        type: 'Kpi',
+        title: 'Demo KPI',
+        x: 8,
+        y: 5,
+        width: 4,
         height: 2,
         config: { value: '$1.25M' },
+      },
+      {
+        id: 'e2e-note',
+        type: 'Text',
+        title: 'Demo Note',
+        x: 0,
+        y: 8,
+        width: 12,
+        height: 2,
+        config: { markdown: 'Demo workspace overview for executive, operational, analytical, finance, and governance reporting.' },
       },
     ],
     filters: [
@@ -106,43 +180,6 @@ export async function seedContent(request: APIRequestContext, user: E2EUser): Pr
         field: 'region',
         operator: 'Equals',
         value: 'North',
-      },
-    ],
-  });
-
-  const report = await apiPost<ApiEntity>(request, user.token, '/reports', {
-    name: `E2E Report ${suffix}`,
-    description: 'Seeded by Playwright',
-    workspaceId: workspace.id,
-    datasetId: dataset.id,
-    connectionId: connection.id,
-    queryText: "select 1 as total_sales, 'North' as region",
-    executionMode: 'Auto',
-    cacheMode: 'Live',
-    visibility: 'Private',
-    allowEmbed: true,
-    tags: ['e2e', 'smoke'],
-    columns: [
-      { sourceName: 'total_sales', displayName: 'Total Sales', displayOrder: 0, visible: true, dataType: 'integer' },
-      { sourceName: 'region', displayName: 'Region', displayOrder: 1, visible: true, dataType: 'text' },
-    ],
-    visualizations: [
-      {
-        $type: 'chart',
-        id: randomUUID(),
-        name: 'Sales by Region',
-        title: 'Sales by Region',
-        type: 'Bar',
-        isDefault: true,
-        showLegend: true,
-        displayOrder: 0,
-        xAxisColumn: 'region',
-        yAxisColumn: 'total_sales',
-        fieldWells: [
-          { role: 'Category', field: 'region', displayName: 'Region', aggregation: 'None', displayOrder: 0 },
-          { role: 'Values', field: 'total_sales', displayName: 'Total Sales', aggregation: 'Sum', displayOrder: 1 },
-        ],
-        layout: { page: 1, x: 0, y: 0, width: 8, height: 5, isHidden: false },
       },
     ],
   });
@@ -160,13 +197,13 @@ export async function seedContent(request: APIRequestContext, user: E2EUser): Pr
   const refreshSchedule = await apiPost<ApiEntity>(request, user.token, '/refresh-jobs/schedules', {
     targetType: 'Dataset',
     targetId: dataset.id,
-    name: `E2E Daily Refresh ${suffix}`,
-    cronExpression: '0 8 * * *',
-    timezone: 'UTC',
+    name: pack.refreshSchedule.name,
+    cronExpression: pack.refreshSchedule.cronExpression,
+    timezone: pack.refreshSchedule.timezone,
     isEnabled: true,
   });
 
-  return { user, workspace, connection, dataset, dashboard, report, refreshJob, refreshSchedule };
+  return { user, workspace, connection, dataset, dashboard, report, demoReports: [report, operationsReport, analyticsReport, financeReport, governanceReport], refreshJob, refreshSchedule };
 }
 
 async function apiPost<T>(request: APIRequestContext, token: string, path: string, data: unknown): Promise<T> {

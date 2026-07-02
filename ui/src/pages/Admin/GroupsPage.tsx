@@ -5,7 +5,7 @@ import type { Group } from '../../lib/api/types';
 import { useToast, Breadcrumb } from '../../components/common';
 
 const BREADCRUMBS = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Home', path: '/' },
   { label: 'Admin' },
   { label: 'Groups' },
 ];
@@ -134,10 +134,10 @@ export function GroupsPage() {
                         {(group as any).department || <span className="opacity-50">—</span>}
                       </td>
                       <td>
-                        <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
-                          <i className="fa-solid fa-users me-1"></i>
-                          {(group as any).memberCount ?? group.permissions?.length ?? 0}
-                        </span>
+                      <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                        <i className="fa-solid fa-users me-1"></i>
+                        {(group as any).memberCount ?? 0}
+                      </span>
                       </td>
                       <td
                         className="text-end pe-4"
@@ -179,6 +179,7 @@ export function GroupsPage() {
                                     <div key={m.userId} className="px-3 py-2 border-bottom small">
                                       <i className="fa-solid fa-user text-muted me-2"></i>
                                       {m.displayName || m.email}
+                                      <span className="text-muted ms-2">({m.role})</span>
                                     </div>
                                   ))
                                 ) : (

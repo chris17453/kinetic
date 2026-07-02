@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AppLayout } from './components/layout';
+import { AppLayout, RequireAdminRoute, RequireCreatorRoute, RequireEnterpriseRoute, RequirePermissionRoute } from './components/layout';
 import { ToastProvider, ErrorBoundary } from './components/common';
 import { useAuthStore } from './stores/authStore';
+import { PERMISSIONS } from './hooks/usePermissions';
 
 // Lazy-load all pages
 const LoginPage = lazy(() => import('./pages/Auth/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -14,20 +15,26 @@ const ResetPasswordPage = lazy(() => import('./pages/Auth/ResetPasswordPage').th
 const SetupPage = lazy(() => import('./pages/Setup/SetupPage').then(m => ({ default: m.SetupPage })));
 const DashboardPage = lazy(() => import('./pages/Dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const WorkspacesPage = lazy(() => import('./pages/Workspaces/WorkspacesPage').then(m => ({ default: m.WorkspacesPage })));
+const WorkspaceDetailPage = lazy(() => import('./pages/Workspaces/WorkspaceDetailPage').then(m => ({ default: m.WorkspaceDetailPage })));
 const DatasetsPage = lazy(() => import('./pages/Datasets/DatasetsPage').then(m => ({ default: m.DatasetsPage })));
 const DatasetDetailPage = lazy(() => import('./pages/Datasets/DatasetDetailPage').then(m => ({ default: m.DatasetDetailPage })));
+const DatasetOntologyPage = lazy(() => import('./pages/Datasets/DatasetOntologyPage').then(m => ({ default: m.DatasetOntologyPage })));
 const DashboardsPage = lazy(() => import('./pages/Dashboards/DashboardsPage').then(m => ({ default: m.DashboardsPage })));
 const DashboardCanvasPage = lazy(() => import('./pages/Dashboards/DashboardCanvasPage').then(m => ({ default: m.DashboardCanvasPage })));
 const CatalogPage = lazy(() => import('./pages/Catalog/CatalogPage').then(m => ({ default: m.CatalogPage })));
 const ReportBuilderPage = lazy(() => import('./pages/Reports/ReportBuilderPage').then(m => ({ default: m.ReportBuilderPage })));
 const ReportViewerPage = lazy(() => import('./pages/Reports/ReportViewerPage').then(m => ({ default: m.ReportViewerPage })));
 const ConnectionsListPage = lazy(() => import('./pages/Connections/ConnectionsListPage').then(m => ({ default: m.ConnectionsListPage })));
+const ConnectionDetailPage = lazy(() => import('./pages/Connections/ConnectionDetailPage').then(m => ({ default: m.ConnectionDetailPage })));
 const ConnectionFormPage = lazy(() => import('./pages/Connections/ConnectionFormPage').then(m => ({ default: m.ConnectionFormPage })));
 const PlaygroundPage = lazy(() => import('./pages/Playground/PlaygroundPage').then(m => ({ default: m.PlaygroundPage })));
 const TableViewerPage = lazy(() => import('./pages/TableViewer/TableViewerPage').then(m => ({ default: m.TableViewerPage })));
 const DataUploadPage = lazy(() => import('./pages/Upload/DataUploadPage').then(m => ({ default: m.DataUploadPage })));
 const IngestPage = lazy(() => import('./pages/Ingest/IngestPage').then(m => ({ default: m.IngestPage })));
 const RefreshOperationsPage = lazy(() => import('./pages/Refresh/RefreshOperationsPage').then(m => ({ default: m.RefreshOperationsPage })));
+const EnterpriseCenterPage = lazy(() => import('./pages/Enterprise/EnterpriseCenterPage').then(m => ({ default: m.EnterpriseCenterPage })));
+const EnterpriseOntologyPage = lazy(() => import('./pages/Enterprise/EnterpriseOntologyPage').then(m => ({ default: m.EnterpriseOntologyPage })));
+const EnterpriseSignalsPage = lazy(() => import('./pages/Enterprise/EnterpriseSignalsPage').then(m => ({ default: m.EnterpriseSignalsPage })));
 const UsersPage = lazy(() => import('./pages/Admin/UsersPage').then(m => ({ default: m.UsersPage })));
 const GroupsPage = lazy(() => import('./pages/Admin/GroupsPage').then(m => ({ default: m.GroupsPage })));
 const AuditPage = lazy(() => import('./pages/Admin/AuditPage').then(m => ({ default: m.AuditPage })));
@@ -71,28 +78,34 @@ export default function App() {
                   <Route element={<AppLayout />}>
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
+                    <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
                     <Route path="/datasets" element={<DatasetsPage />} />
                     <Route path="/datasets/:id" element={<DatasetDetailPage />} />
+                    <Route path="/datasets/:id/ontology" element={<RequireCreatorRoute><DatasetOntologyPage /></RequireCreatorRoute>} />
                     <Route path="/dashboards" element={<DashboardsPage />} />
                     <Route path="/dashboards/:id" element={<DashboardCanvasPage />} />
                     <Route path="/catalog" element={<CatalogPage />} />
-                    <Route path="/reports/new" element={<ReportBuilderPage />} />
+                    <Route path="/reports/new" element={<RequireCreatorRoute><RequirePermissionRoute permission={PERMISSIONS.REPORTS_CREATE}><ReportBuilderPage /></RequirePermissionRoute></RequireCreatorRoute>} />
                     <Route path="/reports/:id" element={<ReportViewerPage />} />
-                    <Route path="/reports/:id/edit" element={<ReportBuilderPage />} />
+                    <Route path="/reports/:id/edit" element={<RequireCreatorRoute><RequirePermissionRoute permission={PERMISSIONS.REPORTS_MANAGE}><ReportBuilderPage /></RequirePermissionRoute></RequireCreatorRoute>} />
                     <Route path="/reports/:id/view" element={<ReportViewerPage />} />
                     <Route path="/connections" element={<ConnectionsListPage />} />
-                    <Route path="/connections/new" element={<ConnectionFormPage />} />
-                    <Route path="/connections/:id/edit" element={<ConnectionFormPage />} />
-                    <Route path="/playground" element={<PlaygroundPage />} />
-                    <Route path="/tables" element={<TableViewerPage />} />
-                    <Route path="/upload" element={<DataUploadPage />} />
-                    <Route path="/ingest" element={<IngestPage />} />
-                    <Route path="/refresh" element={<RefreshOperationsPage />} />
-                    <Route path="/admin/users" element={<UsersPage />} />
-                    <Route path="/admin/groups" element={<GroupsPage />} />
-                    <Route path="/admin/integrations" element={<IntegrationsPage />} />
-                    <Route path="/admin/audit" element={<AuditPage />} />
-                    <Route path="/admin/organization" element={<OrganizationPage />} />
+                    <Route path="/connections/:id" element={<ConnectionDetailPage />} />
+                    <Route path="/connections/new" element={<RequireCreatorRoute><RequirePermissionRoute permission={PERMISSIONS.CONNECTIONS_CREATE}><ConnectionFormPage /></RequirePermissionRoute></RequireCreatorRoute>} />
+                    <Route path="/connections/:id/edit" element={<RequireCreatorRoute><RequirePermissionRoute permission={PERMISSIONS.CONNECTIONS_MANAGE}><ConnectionFormPage /></RequirePermissionRoute></RequireCreatorRoute>} />
+                    <Route path="/playground" element={<RequireCreatorRoute><PlaygroundPage /></RequireCreatorRoute>} />
+                    <Route path="/tables" element={<RequireCreatorRoute><TableViewerPage /></RequireCreatorRoute>} />
+                    <Route path="/upload" element={<RequireCreatorRoute><DataUploadPage /></RequireCreatorRoute>} />
+                    <Route path="/ingest" element={<RequireCreatorRoute><IngestPage /></RequireCreatorRoute>} />
+                    <Route path="/refresh" element={<RequireCreatorRoute><RefreshOperationsPage /></RequireCreatorRoute>} />
+                    <Route path="/enterprise" element={<RequireEnterpriseRoute><EnterpriseCenterPage /></RequireEnterpriseRoute>} />
+                    <Route path="/enterprise/signals" element={<RequireEnterpriseRoute><EnterpriseSignalsPage /></RequireEnterpriseRoute>} />
+                    <Route path="/enterprise/ontology" element={<RequireEnterpriseRoute><EnterpriseOntologyPage /></RequireEnterpriseRoute>} />
+                    <Route path="/admin/users" element={<RequireAdminRoute><UsersPage /></RequireAdminRoute>} />
+                    <Route path="/admin/groups" element={<RequireAdminRoute><GroupsPage /></RequireAdminRoute>} />
+                    <Route path="/admin/integrations" element={<RequireAdminRoute><IntegrationsPage /></RequireAdminRoute>} />
+                    <Route path="/admin/audit" element={<RequireAdminRoute><AuditPage /></RequireAdminRoute>} />
+                    <Route path="/admin/organization" element={<RequireAdminRoute><OrganizationPage /></RequireAdminRoute>} />
                     <Route path="/profile" element={<ProfilePage />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

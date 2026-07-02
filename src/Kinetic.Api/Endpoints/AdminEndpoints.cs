@@ -99,16 +99,38 @@ public static class AdminEndpoints
 
     private static async Task<IResult> InviteUser(
         [FromBody] InviteUserRequest request,
-        IUserService userService)
+        IUserService userService,
+        IAuthService authService,
+        HttpContext context,
+        KineticDbContext db)
     {
-        // Create the user with a placeholder — they'll set password on first login
-        var user = await userService.CreateUserAsync(new CreateUserRequest(
-            request.Email,
-            request.Email.Split('@')[0],
-            null,
-            null));
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        return Results.Ok(new { id = user.Id, email = user.Email });
+        if (user == null)
+        {
+            user = await userService.CreateUserAsync(new CreateUserRequest(
+                email,
+                email.Split('@')[0],
+                null,
+                null));
+        }
+        else if (!user.IsActive)
+        {
+            await userService.SetUserActiveAsync(user.Id, true);
+            user = await userService.GetUserByIdAsync(user.Id) ?? user;
+        }
+
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}";
+        var reset = await authService.RequestPasswordResetAsync(email, baseUrl);
+
+        return Results.Ok(new
+        {
+            id = user.Id,
+            email = user.Email,
+            message = reset.Message,
+            resetUrl = reset.ResetUrl
+        });
     }
 
     private static async Task<IResult> GetGroups(KineticDbContext db)
@@ -116,6 +138,7 @@ public static class AdminEndpoints
         var groups = await db.Groups
             .Include(g => g.Permissions)
             .Include(g => g.UserGroups)
+            .ThenInclude(ug => ug.User)
             .OrderBy(g => g.Name)
             .ToListAsync();
 
@@ -129,7 +152,15 @@ public static class AdminEndpoints
                 isSystem = g.IsSystem,
                 isDefault = g.IsDefault,
                 memberCount = g.UserGroups.Count,
-                permissions = g.Permissions.Select(p => p.PermissionCode),
+                permissions = g.Permissions.Select(p => new { permissionCode = p.PermissionCode }),
+                members = g.UserGroups
+                    .Select(ug => new
+                    {
+                        userId = ug.UserId,
+                        displayName = ug.User != null ? ug.User.DisplayName : null,
+                        email = ug.User != null ? ug.User.Email : null,
+                        role = ug.Role.ToString()
+                    }),
                 createdAt = g.CreatedAt
             })
         });

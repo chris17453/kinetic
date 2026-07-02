@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { forgotPassword } from '../../lib/api/auth';
+import { useBrandingStore } from '../../stores/brandingStore';
 
 const schema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -11,6 +12,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function ForgotPasswordPage() {
+  const { branding } = useBrandingStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ message: string; resetUrl?: string } | null>(null);
@@ -34,21 +36,37 @@ export function ForgotPasswordPage() {
     }
   };
 
+  const primaryColor = branding?.primaryColor || '#2563EB';
+  const orgName = branding?.orgName || 'Enterprise';
+
   return (
     <div className="min-vh-100 d-flex">
       {/* Left brand panel */}
       <div
         className="d-none d-lg-flex flex-column justify-content-between p-5 text-white"
-        style={{ width: '45%', background: 'linear-gradient(135deg, #2563EB 0%, #1e40af 100%)' }}
+        style={{ width: '45%', background: `linear-gradient(135deg, ${primaryColor} 0%, #1e40af 100%)` }}
       >
         <div className="d-flex align-items-center">
-          <img src="/logo-full.png" alt="Kinetic" height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          {branding?.useTextLogo ? (
+            <span style={{
+              fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+              fontSize: branding.logoTextSize || '1.5rem',
+              color: '#fff',
+              fontWeight: 700,
+            }}>
+              {branding.logoText || orgName}
+            </span>
+          ) : branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          ) : (
+            <img src="/logo-full.png" alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          )}
         </div>
         <div>
-          <h2 className="fw-bold display-6 mb-3">Forgot your<br />password?</h2>
-          <p className="opacity-75">No worries — we'll help you get back into your account in no time.</p>
+          <h2 className="fw-bold display-6 mb-3">Recover your<br />access</h2>
+          <p className="opacity-75">Reset access to the enterprise analytics workspace securely and quickly.</p>
         </div>
-        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} Kinetic Reports</p>
+        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} {orgName}</p>
       </div>
 
       {/* Right form panel */}
@@ -56,7 +74,20 @@ export function ForgotPasswordPage() {
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Mobile logo */}
           <div className="d-lg-none text-center mb-4">
-            <img src="/logo-full.png" alt="Kinetic" height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            {branding?.useTextLogo ? (
+              <span style={{
+                fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                fontSize: branding.logoTextSize || '1.5rem',
+                color: branding.logoTextColor || primaryColor,
+                fontWeight: 700,
+              }}>
+                {branding.logoText || orgName}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            ) : (
+              <img src="/logo-full.png" alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            )}
           </div>
 
           <div className="card border-0 shadow-sm p-4">
@@ -71,21 +102,21 @@ export function ForgotPasswordPage() {
                 {success.resetUrl && (
                   <div className="alert alert-info mb-3">
                     <div className="small fw-medium mb-1">
-                      <i className="fa-solid fa-code me-1"></i>Dev Mode — Reset Link:
+                      <i className="fa-solid fa-code me-1"></i>Dev Mode - Reset Link:
                     </div>
                     <a href={success.resetUrl} className="small text-break">{success.resetUrl}</a>
                   </div>
                 )}
 
                 <Link to="/login" className="btn btn-outline-primary w-100">
-                  <i className="fa-solid fa-arrow-left me-2"></i>Back to Sign in
+                  <i className="fa-solid fa-arrow-left me-2"></i>Back to sign in
                 </Link>
               </>
             ) : (
               <>
-                <h4 className="fw-bold mb-1">Reset password</h4>
+                <h4 className="fw-bold mb-1">Request reset link</h4>
                 <p className="text-muted small mb-4">
-                  Enter the email address associated with your account and we'll send you a link to reset your password.
+                  Enter the email address associated with your account and we'll send a secure reset link.
                 </p>
 
                 {error && (
@@ -121,7 +152,7 @@ export function ForgotPasswordPage() {
                     )}
                   </button>
                   <Link to="/login" className="btn btn-outline-secondary w-100">
-                    <i className="fa-solid fa-arrow-left me-2"></i>Back to Sign in
+                    <i className="fa-solid fa-arrow-left me-2"></i>Back to sign in
                   </Link>
                 </form>
               </>

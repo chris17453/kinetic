@@ -68,6 +68,7 @@ public class ReportEndpointsTests : IClassFixture<KineticWebApplicationFactory>
             cacheMode = "Live",
             visibility = "Private",
             allowEmbed = true,
+            isFeatured = true,
             tags = new[] { "sales", "executive" },
             columns = new[]
             {
@@ -121,6 +122,7 @@ public class ReportEndpointsTests : IClassFixture<KineticWebApplicationFactory>
         createdJson.RootElement.GetProperty("executionMode").GetString().Should().Be("Auto");
         createdJson.RootElement.GetProperty("autoRun").GetBoolean().Should().BeTrue();
         createdJson.RootElement.GetProperty("allowEmbed").GetBoolean().Should().BeTrue();
+        createdJson.RootElement.GetProperty("isFeatured").GetBoolean().Should().BeTrue();
 
         var detailResponse = await _client.GetAsync($"/api/reports/{reportId}");
         var detailBody = await detailResponse.Content.ReadAsStringAsync();
@@ -128,6 +130,7 @@ public class ReportEndpointsTests : IClassFixture<KineticWebApplicationFactory>
         using var detailDocument = JsonDocument.Parse(detailBody);
         var detail = detailDocument.RootElement;
         detail.GetProperty("executionMode").GetString().Should().Be("Auto");
+        detail.GetProperty("isFeatured").GetBoolean().Should().BeTrue();
         detail.GetProperty("workspaceId").GetGuid().Should().Be(workspaceId);
         detail.GetProperty("tags").EnumerateArray().Select(t => t.GetString()).Should().Contain("sales");
         var visualization = detail.GetProperty("visualizations")[0];

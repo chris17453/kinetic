@@ -164,6 +164,7 @@ public static class ReportEndpoints
             Tags = request.Tags,
             Visibility = request.Visibility ?? Visibility.Private,
             AllowEmbed = request.AllowEmbed ?? false,
+            IsFeatured = request.IsFeatured ?? false,
             RowFilterExpression = request.RowFilterExpression
         };
 
@@ -206,6 +207,7 @@ public static class ReportEndpoints
             Tags = request.Tags,
             Visibility = request.Visibility,
             AllowEmbed = request.AllowEmbed,
+            IsFeatured = request.IsFeatured,
             RowFilterExpression = request.RowFilterExpression
         };
 
@@ -895,6 +897,7 @@ public class CreateReportApiRequest
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }
     public bool? AllowEmbed { get; set; }
+    public bool? IsFeatured { get; set; }
     public string? RowFilterExpression { get; set; }
 }
 
@@ -916,6 +919,7 @@ public class UpdateReportApiRequest
     public List<string>? Tags { get; set; }
     public Visibility? Visibility { get; set; }
     public bool? AllowEmbed { get; set; }
+    public bool? IsFeatured { get; set; }
     public string? RowFilterExpression { get; set; }
 }
 

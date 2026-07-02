@@ -246,6 +246,7 @@ public class SetupService
             existingUser.DisplayName = admin.DisplayName;
             existingUser.PasswordHash = passwordService.HashPassword(admin.Password);
             existingUser.IsActive = true;
+            await EnsureAdminMembershipAsync(db, adminGroup, existingUser);
         }
         else
         {
@@ -324,6 +325,7 @@ public class SetupService
             existingUser.DisplayName = admin.DisplayName;
             existingUser.PasswordHash = passwordService.HashPassword(admin.Password);
             existingUser.IsActive = true;
+            await EnsureAdminMembershipAsync(db, adminGroup, existingUser);
         }
         else
         {
@@ -350,6 +352,20 @@ public class SetupService
         }
 
         await db.SaveChangesAsync();
+    }
+
+    public static async Task EnsureAdminMembershipAsync(KineticDbContext db, Group adminGroup, User user)
+    {
+        if (await db.UserGroups.AnyAsync(ug => ug.UserId == user.Id && ug.GroupId == adminGroup.Id))
+            return;
+
+        db.UserGroups.Add(new UserGroup
+        {
+            UserId = user.Id,
+            GroupId = adminGroup.Id,
+            Role = GroupRole.Owner,
+            JoinedAt = DateTime.UtcNow
+        });
     }
 }
 

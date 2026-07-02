@@ -14,6 +14,7 @@ import type {
   Workspace,
 } from '../../lib/api/types';
 import { Breadcrumb, useToast } from '../../components/common';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface DatasetForm {
   id?: string;
@@ -52,6 +53,8 @@ export function DatasetsPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { canCreateReports, canManageReports, canCreateConnections, canManageConnections, canUploadData } = usePermissions();
+  const canManageDatasets = canCreateReports || canManageReports || canCreateConnections || canManageConnections || canUploadData;
   const [search, setSearch] = useState('');
   const [workspaceFilter, setWorkspaceFilter] = useState(searchParams.get('workspaceId') ?? '');
   const [showForm, setShowForm] = useState(false);
@@ -172,16 +175,18 @@ export function DatasetsPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Datasets' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Datasets' }]} />
 
       <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
           <h4 className="fw-bold mb-0">Datasets</h4>
           <p className="text-muted small mb-0">Curate source queries, fields, and semantic metadata for reports</p>
         </div>
-        <button className="btn btn-primary" onClick={startCreate}>
-          <i className="fa-solid fa-plus me-2"></i>New Dataset
-        </button>
+        {canManageDatasets && (
+          <button className="btn btn-primary" onClick={startCreate}>
+            <i className="fa-solid fa-plus me-2"></i>New Dataset
+          </button>
+        )}
       </div>
 
       <div className="card border-0 shadow-sm mb-3">
@@ -214,7 +219,7 @@ export function DatasetsPage() {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && canManageDatasets && (
         <div className="card border-0 shadow-sm mb-3">
           <div className="card-header bg-white d-flex align-items-center justify-content-between">
             <h6 className="fw-bold mb-0">{form.id ? 'Edit Dataset' : 'New Dataset'}</h6>
@@ -370,12 +375,12 @@ export function DatasetsPage() {
                         <button className="btn btn-outline-secondary btn-sm" onClick={() => inspectMutation.mutate(dataset.id)} disabled={inspectMutation.isPending || !dataset.connectionId || !dataset.sourceTable} title="Inspect source table">
                           <i className="fa-solid fa-wand-magic-sparkles"></i>
                         </button>
-                        <button className="btn btn-outline-secondary btn-sm" onClick={() => startEdit(dataset)} title="Edit">
-                          <i className="fa-solid fa-pen"></i>
-                        </button>
-                        <button className="btn btn-outline-danger btn-sm" onClick={() => setArchiveId(dataset.id)} title="Archive">
-                          <i className="fa-solid fa-box-archive"></i>
-                        </button>
+                    {canManageDatasets && <button className="btn btn-outline-secondary btn-sm" onClick={() => startEdit(dataset)} title="Edit">
+                      <i className="fa-solid fa-pen"></i>
+                    </button>}
+                    {canManageDatasets && <button className="btn btn-outline-danger btn-sm" onClick={() => setArchiveId(dataset.id)} title="Archive">
+                      <i className="fa-solid fa-box-archive"></i>
+                    </button>}
                       </div>
                     </td>
                   </tr>
@@ -386,7 +391,7 @@ export function DatasetsPage() {
         )}
       </div>
 
-      {archiveId && (
+      {archiveId && canManageDatasets && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-sm">
             <div className="modal-content border-0 shadow-lg">

@@ -5,6 +5,7 @@ import api from '../../lib/api/client';
 import type { Connection } from '../../lib/api/types';
 import { useToast } from '../../components/common';
 import { Breadcrumb } from '../../components/common';
+import { usePermissions } from '../../hooks/usePermissions';
 
 const typeIcon: Record<string, string> = {
   PostgreSQL: 'fa-elephant', MySQL: 'fa-dolphin', SqlServer: 'fa-database',
@@ -20,6 +21,8 @@ const typeBadge: Record<string, string> = {
 export function ConnectionsListPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { canCreateReports, canManageReports, canCreateConnections, canManageConnections, canUploadData } = usePermissions();
+  const canManageConnectionsPage = canCreateReports || canManageReports || canCreateConnections || canManageConnections || canUploadData;
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<Record<string, 'testing' | 'ok' | 'fail'>>({});
@@ -61,15 +64,43 @@ export function ConnectionsListPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Connections' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Connections' }]} />
       <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
           <h4 className="fw-bold mb-0">Connections</h4>
-          <p className="text-muted small mb-0">Manage your database connections</p>
+          <p className="text-muted small mb-0">Managed source systems that power reports, dashboards, and datasets.</p>
         </div>
-        <Link to="/connections/new" className="btn btn-primary">
-          <i className="fa-solid fa-plus me-2"></i>New Connection
-        </Link>
+        {canManageConnectionsPage && (
+          <Link to="/connections/new" className="btn btn-primary">
+            <i className="fa-solid fa-plus me-2"></i>New Connection
+          </Link>
+        )}
+      </div>
+
+      <div className="card border-0 shadow-sm mb-4">
+        <div className="card-body py-3">
+          <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+            <div className="min-width-0">
+              <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Connection hub</div>
+              <div className="fw-semibold">Inspect and maintain the sources behind your BI content.</div>
+              <div className="text-muted small">Open a connection to review schema, linked datasets, and workspace placement.</div>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <Link to="/catalog" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-chart-bar me-1"></i>
+                Reports
+              </Link>
+              <Link to="/datasets" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-cubes me-1"></i>
+                Datasets
+              </Link>
+              <Link to="/workspaces" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-briefcase me-1"></i>
+                Workspaces
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="card border-0 shadow-sm">
@@ -96,7 +127,7 @@ export function ConnectionsListPage() {
             <i className="fa-solid fa-server d-block mx-auto mb-3 text-muted" style={{ fontSize: '2.5rem', opacity: 0.3 }}></i>
             <h6>No connections found</h6>
             <p className="text-muted small">{search ? 'Try a different search term' : 'Connect your first database to get started'}</p>
-            {!search && <Link to="/connections/new" className="btn btn-primary btn-sm">Add connection</Link>}
+            {!search && canManageConnectionsPage && <Link to="/connections/new" className="btn btn-primary btn-sm">Add connection</Link>}
           </div>
         ) : (
           <div className="table-responsive">
@@ -122,7 +153,11 @@ export function ConnectionsListPage() {
                             <i className={`fa-solid ${typeIcon[conn.type] || 'fa-database'} text-primary`}></i>
                           </div>
                           <div>
-                            <div className="fw-semibold">{conn.name}</div>
+                            <div className="fw-semibold">
+                              <Link to={`/connections/${conn.id}`} className="text-decoration-none">
+                                {conn.name}
+                              </Link>
+                            </div>
                             {conn.description && <div className="text-muted small">{conn.description}</div>}
                           </div>
                         </div>
@@ -132,10 +167,10 @@ export function ConnectionsListPage() {
 	                      </td>
 	                      <td>
 	                        {conn.workspaceName || conn.workspace?.name ? (
-	                          <span className="badge bg-light text-dark border">
+	                          <Link to={`/workspaces/${conn.workspaceId || conn.workspace?.id || ''}`} className="badge bg-light text-dark border text-decoration-none">
 	                            <i className="fa-solid fa-briefcase me-1"></i>
 	                            {conn.workspaceName || conn.workspace?.name}
-	                          </span>
+	                          </Link>
 	                        ) : (
 	                          <span className="text-muted small">None</span>
 	                        )}
@@ -154,24 +189,24 @@ export function ConnectionsListPage() {
                       </td>
                       <td className="text-end pe-4">
                         <div className="d-flex align-items-center justify-content-end gap-1">
-                          <button
+                          {canManageConnectionsPage && <button
                             className="btn btn-outline-secondary btn-sm"
                             onClick={() => testConnection(conn.id)}
                             disabled={status === 'testing'}
                             title="Test connection"
                           >
                             <i className="fa-solid fa-plug"></i>
-                          </button>
-                          <Link to={`/connections/${conn.id}/edit`} className="btn btn-outline-secondary btn-sm" title="Edit">
+                          </button>}
+                          {canManageConnectionsPage && <Link to={`/connections/${conn.id}/edit`} className="btn btn-outline-secondary btn-sm" title="Edit">
                             <i className="fa-solid fa-pen"></i>
-                          </Link>
-                          <button
+                          </Link>}
+                          {canManageConnectionsPage && <button
                             className="btn btn-outline-danger btn-sm"
                             onClick={() => setDeleteId(conn.id)}
                             title="Delete"
                           >
                             <i className="fa-solid fa-trash"></i>
-                          </button>
+                          </button>}
                         </div>
                       </td>
                     </tr>
@@ -183,7 +218,7 @@ export function ConnectionsListPage() {
         )}
       </div>
 
-      {deleteId && (
+      {deleteId && canManageConnectionsPage && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-sm">
             <div className="modal-content border-0 shadow-lg">

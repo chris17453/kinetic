@@ -208,7 +208,7 @@ export function IntegrationsPage() {
     <div>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div>
-          <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Admin' }, { label: 'Integrations' }]} />
+          <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Admin' }, { label: 'Integrations' }]} />
           <h4 className="fw-bold mb-1">Enterprise Integrations</h4>
           <p className="text-muted small mb-0">Manage SSO, Azure, Azure DevOps, and system-login configuration records.</p>
         </div>

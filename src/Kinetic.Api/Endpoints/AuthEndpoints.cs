@@ -620,7 +620,18 @@ public static class AuthEndpoints
             {
                 id = ug.GroupId,
                 name = ug.Group?.Name,
-                role = ug.Role.ToString()
+                role = ug.Role.ToString(),
+                group = ug.Group != null ? new
+                {
+                    id = ug.Group.Id,
+                    name = ug.Group.Name,
+                    description = ug.Group.Description,
+                    permissions = ug.Group.Permissions.Select(p => new
+                    {
+                        groupId = p.GroupId,
+                        permissionCode = p.PermissionCode
+                    })
+                } : null
             }),
             timezone = user.Timezone,
             locale = user.Locale,

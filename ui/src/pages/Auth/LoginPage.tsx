@@ -30,7 +30,7 @@ export function LoginPage() {
   };
 
   const primaryColor = branding?.primaryColor || '#2563EB';
-  const orgName = branding?.orgName || 'Kinetic';
+  const orgName = branding?.orgName || 'Enterprise';
   const allowLocal = branding?.allowLocalUsers ?? true;
   const allowEntra = branding?.allowEntraId ?? true;
 
@@ -63,8 +63,8 @@ export function LoginPage() {
           )}
         </div>
         <div>
-          <h2 className="fw-bold display-6 mb-3">Powerful reporting,<br />built for your team.</h2>
-          <p className="opacity-75">Connect any database, build reports in minutes, and share insights with your entire organization.</p>
+          <h2 className="fw-bold display-6 mb-3">Enterprise analytics,<br />built for your team.</h2>
+          <p className="opacity-75">Connect any database, govern metrics and ontology, and share trusted insights across the organization.</p>
           <div className="mt-4 d-flex flex-column gap-2">
             {['Multi-database support', 'Real-time query execution', 'Beautiful visualizations', 'Role-based access control'].map(f => (
               <div key={f} className="d-flex align-items-center gap-2">
@@ -74,7 +74,7 @@ export function LoginPage() {
             ))}
           </div>
         </div>
-        <p className="small opacity-50 mb-0">© {new Date().getFullYear()} Kinetic Reports</p>
+        <p className="small opacity-50 mb-0">© {new Date().getFullYear()} {orgName}</p>
       </div>
 
       {/* Right form panel */}
@@ -181,7 +181,7 @@ export function LoginPage() {
 
             {allowLocal && (
               <p className="text-center text-muted small mt-3 mb-0">
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Link to="/register" className="fw-medium text-decoration-none" style={{ color: primaryColor }}>Create account</Link>
               </p>
             )}

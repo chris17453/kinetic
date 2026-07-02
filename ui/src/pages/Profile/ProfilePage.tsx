@@ -318,7 +318,7 @@ export function ProfilePage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'My Profile' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'My Profile' }]} />
 
       {/* Page header */}
       <div className="d-flex align-items-center gap-3 mb-4">
@@ -940,7 +940,7 @@ export function ProfilePage() {
                 <label className="form-check-label" htmlFor="notifyInApp">
                   In-app notifications
                   <span className="d-block text-muted small">
-                    Show notifications inside the Kinetic interface.
+                    Show notifications inside the enterprise interface.
                   </span>
                 </label>
               </div>

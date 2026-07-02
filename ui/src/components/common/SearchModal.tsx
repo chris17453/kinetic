@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { Report } from '../../lib/api/types';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface Props { show: boolean; onClose: () => void; }
 
@@ -10,6 +11,7 @@ export function SearchModal({ show, onClose }: Props) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { canCreateReports, canCreateConnections, canUploadData } = usePermissions();
 
   const { data: results } = useQuery({
     queryKey: ['search', query],
@@ -31,10 +33,10 @@ export function SearchModal({ show, onClose }: Props) {
   const go = (path: string) => { navigate(path); onClose(); };
 
   const quickLinks = [
-    { icon: 'fa-plus', label: 'New Report', path: '/reports/new' },
-    { icon: 'fa-terminal', label: 'Playground', path: '/playground' },
-    { icon: 'fa-server', label: 'Connections', path: '/connections' },
-    { icon: 'fa-upload', label: 'Upload Data', path: '/upload' },
+    ...(canCreateReports ? [{ icon: 'fa-plus', label: 'New Report', path: '/reports/new' }] : []),
+    ...(canCreateReports || canCreateConnections ? [{ icon: 'fa-terminal', label: 'Playground', path: '/playground' }] : []),
+    ...(canCreateConnections ? [{ icon: 'fa-server', label: 'Connections', path: '/connections' }] : []),
+    ...(canUploadData ? [{ icon: 'fa-upload', label: 'Upload Data', path: '/upload' }] : []),
   ];
 
   if (!show) return null;

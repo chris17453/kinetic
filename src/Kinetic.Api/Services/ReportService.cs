@@ -172,6 +172,7 @@ public class ReportService : IReportService
             CacheMode = request.CacheMode,
             CacheTtlSeconds = request.CacheTtlSeconds,
             AllowEmbed = request.AllowEmbed,
+            IsFeatured = request.IsFeatured,
             
             // Catalog
             WorkspaceId = request.WorkspaceId,
@@ -225,6 +226,7 @@ public class ReportService : IReportService
         if (request.CacheMode.HasValue) report.CacheMode = request.CacheMode.Value;
         if (request.CacheTtlSeconds.HasValue) report.CacheTtlSeconds = request.CacheTtlSeconds.Value;
         if (request.AllowEmbed.HasValue) report.AllowEmbed = request.AllowEmbed.Value;
+        if (request.IsFeatured.HasValue) report.IsFeatured = request.IsFeatured.Value;
         if (request.WorkspaceId.HasValue) report.WorkspaceId = request.WorkspaceId.Value;
         if (request.CategoryId.HasValue) report.CategoryId = request.CategoryId.Value;
         if (request.Tags != null) report.Tags = request.Tags;
@@ -537,6 +539,7 @@ public class CreateReportRequest
     public CacheMode CacheMode { get; set; } = CacheMode.None;
     public int? CacheTtlSeconds { get; set; }
     public bool AllowEmbed { get; set; }
+    public bool IsFeatured { get; set; }
     public Guid? WorkspaceId { get; set; }
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }
@@ -557,6 +560,7 @@ public class UpdateReportRequest
     public CacheMode? CacheMode { get; set; }
     public int? CacheTtlSeconds { get; set; }
     public bool? AllowEmbed { get; set; }
+    public bool? IsFeatured { get; set; }
     public Guid? WorkspaceId { get; set; }
     public Guid? CategoryId { get; set; }
     public List<string>? Tags { get; set; }

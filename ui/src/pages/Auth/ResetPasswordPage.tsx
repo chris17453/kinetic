@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resetPassword } from '../../lib/api/auth';
+import { useBrandingStore } from '../../stores/brandingStore';
 
 const schema = z.object({
   password: z
@@ -40,10 +41,13 @@ export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email') || '';
   const token = searchParams.get('token') || '';
+  const { branding } = useBrandingStore();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const primaryColor = branding?.primaryColor || '#2563EB';
+  const orgName = branding?.orgName || 'Enterprise';
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -60,16 +64,29 @@ export function ResetPasswordPage() {
       <div className="min-vh-100 d-flex">
         <div
           className="d-none d-lg-flex flex-column justify-content-between p-5 text-white"
-          style={{ width: '45%', background: 'linear-gradient(135deg, #2563EB 0%, #1e40af 100%)' }}
+          style={{ width: '45%', background: `linear-gradient(135deg, ${primaryColor} 0%, #1e40af 100%)` }}
         >
           <div className="d-flex align-items-center">
-            <img src="/logo-full.png" alt="Kinetic" height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+            {branding?.useTextLogo ? (
+              <span style={{
+                fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                fontSize: branding.logoTextSize || '1.5rem',
+                color: '#fff',
+                fontWeight: 700,
+              }}>
+                {branding.logoText || orgName}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+            ) : (
+              <img src="/logo-full.png" alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+            )}
           </div>
           <div>
-            <h2 className="fw-bold display-6 mb-3">Reset your<br />password</h2>
-            <p className="opacity-75">Choose a new, strong password for your account.</p>
-          </div>
-          <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} Kinetic Reports</p>
+          <h2 className="fw-bold display-6 mb-3">Reset your<br />access</h2>
+          <p className="opacity-75">Choose a new, strong password for the enterprise analytics platform.</p>
+        </div>
+          <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} {orgName}</p>
         </div>
         <div className="flex-grow-1 d-flex align-items-center justify-content-center p-4 bg-light">
           <div style={{ width: '100%', maxWidth: 420 }}>
@@ -117,20 +134,33 @@ export function ResetPasswordPage() {
         style={{ width: '45%', background: 'linear-gradient(135deg, #2563EB 0%, #1e40af 100%)' }}
       >
         <div className="d-flex align-items-center">
-          <img src="/logo-full.png" alt="Kinetic" height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          <img src="/logo-full.png" alt={orgName} height={42} style={{ maxWidth: 180, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
         </div>
         <div>
-          <h2 className="fw-bold display-6 mb-3">Reset your<br />password</h2>
-          <p className="opacity-75">Choose a new, strong password for your account.</p>
-        </div>
-        <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} Kinetic Reports</p>
+            <h2 className="fw-bold display-6 mb-3">Reset your<br />access</h2>
+            <p className="opacity-75">Choose a new, strong password for the enterprise analytics platform.</p>
+          </div>
+          <p className="small opacity-50 mb-0">&copy; {new Date().getFullYear()} {orgName}</p>
       </div>
 
       {/* Right form panel */}
       <div className="flex-grow-1 d-flex align-items-center justify-content-center p-4 bg-light">
         <div style={{ width: '100%', maxWidth: 420 }}>
           <div className="d-lg-none text-center mb-4">
-            <img src="/logo-full.png" alt="Kinetic" height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            {branding?.useTextLogo ? (
+              <span style={{
+                fontFamily: branding.logoTextFont || 'Inter, system-ui, sans-serif',
+                fontSize: branding.logoTextSize || '1.5rem',
+                color: branding.logoTextColor || primaryColor,
+                fontWeight: 700,
+              }}>
+                {branding.logoText || orgName}
+              </span>
+            ) : branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            ) : (
+              <img src="/logo-full.png" alt={orgName} height={40} style={{ maxWidth: 160, objectFit: 'contain' }} />
+            )}
           </div>
 
           <div className="card border-0 shadow-sm p-4">
@@ -139,9 +169,9 @@ export function ResetPasswordPage() {
                 <div className="text-center mb-3">
                   <i className="fa-solid fa-circle-check text-success" style={{ fontSize: 48 }}></i>
                 </div>
-                <h4 className="fw-bold mb-2 text-center">Password Reset!</h4>
+                <h4 className="fw-bold mb-2 text-center">Password reset complete</h4>
                 <p className="text-muted small text-center mb-3">
-                  Your password has been successfully reset. You can now sign in with your new password.
+                  Your password has been successfully reset. You can now sign in with your new credentials.
                 </p>
                 <Link to="/login" className="btn btn-primary w-100 fw-semibold">
                   <i className="fa-solid fa-right-to-bracket me-2"></i>Sign in

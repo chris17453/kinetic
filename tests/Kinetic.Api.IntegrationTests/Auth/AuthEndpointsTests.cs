@@ -3,16 +3,22 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Kinetic.Core.Domain.Identity;
+using Kinetic.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kinetic.Api.IntegrationTests.Auth;
 
 public class AuthEndpointsTests : IClassFixture<KineticWebApplicationFactory>
 {
+    private readonly KineticWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public AuthEndpointsTests(KineticWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -66,6 +72,54 @@ public class AuthEndpointsTests : IClassFixture<KineticWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<AuthResponse>();
         body!.Token.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Login_IncludesGroupPermissionsInUserPayload()
+    {
+        var email = $"enterprise_{Guid.NewGuid()}@example.com";
+        await _client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email,
+            password = "Correct1!",
+            displayName = "Enterprise User"
+        });
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<KineticDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Email == email);
+            var group = new Group
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = user.OrganizationId,
+                Name = "Enterprise Admins",
+                Description = "Can view enterprise center",
+                IsSystem = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Groups.Add(group);
+            db.GroupPermissions.Add(new GroupPermission
+            {
+                GroupId = group.Id,
+                PermissionCode = Permissions.OrgManage
+            });
+            db.UserGroups.Add(new UserGroup
+            {
+                UserId = user.Id,
+                GroupId = group.Id,
+                Role = GroupRole.Owner,
+                JoinedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new { email, password = "Correct1!" });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = JsonDocument.Parse(await loginResponse.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("user").GetProperty("groups").EnumerateArray()
+            .Should().Contain(group => group.GetProperty("group").GetProperty("permissions").EnumerateArray()
+                .Any(permission => permission.GetProperty("permissionCode").GetString() == Permissions.OrgManage));
     }
 
     [Fact]

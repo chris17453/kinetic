@@ -4,7 +4,7 @@ import api from '../../lib/api/client';
 import { useToast, Breadcrumb } from '../../components/common';
 
 const BREADCRUMBS = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Home', path: '/' },
   { label: 'Stream Ingest' },
 ];
 

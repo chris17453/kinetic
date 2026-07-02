@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { Visibility, Workspace, WorkspaceMember, WorkspaceRole } from '../../lib/api/types';
 import { Breadcrumb, useToast } from '../../components/common';
+import { buildEnterpriseSummary } from '../../lib/enterprise/enterpriseSummary';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface WorkspaceForm {
   id?: string;
@@ -36,6 +38,8 @@ const workspaceRoles: WorkspaceRole[] = ['Viewer', 'Contributor', 'Member', 'Adm
 export function WorkspacesPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { canCreateReports, canManageReports, canManageConnections, canUploadData } = usePermissions();
+  const canManageWorkspaces = canCreateReports || canManageReports || canManageConnections || canUploadData;
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<WorkspaceForm>(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -48,6 +52,30 @@ export function WorkspacesPage() {
     queryKey: ['workspaces'],
     queryFn: async () => {
       const res = await api.get<{ items: Workspace[] }>('/workspaces');
+      return res.data.items;
+    },
+  });
+
+  const { data: datasets } = useQuery({
+    queryKey: ['workspaces', 'enterprise', 'datasets'],
+    queryFn: async () => {
+      const res = await api.get<{ items: import('../../lib/api/types').Dataset[] }>('/datasets', { params: { pageSize: 200 } });
+      return res.data.items;
+    },
+  });
+
+  const { data: reports } = useQuery({
+    queryKey: ['workspaces', 'enterprise', 'reports'],
+    queryFn: async () => {
+      const res = await api.get<{ items: import('../../lib/api/types').Report[] }>('/reports', { params: { pageSize: 200 } });
+      return res.data.items;
+    },
+  });
+
+  const { data: refreshJobs } = useQuery({
+    queryKey: ['workspaces', 'enterprise', 'refresh-jobs'],
+    queryFn: async () => {
+      const res = await api.get<{ items: import('../../lib/api/types').RefreshJob[] }>('/refresh-jobs', { params: { pageSize: 200 } });
       return res.data.items;
     },
   });
@@ -165,18 +193,95 @@ export function WorkspacesPage() {
     setShowForm(true);
   };
 
+  const enterpriseSummary = buildEnterpriseSummary(datasets ?? [], reports ?? [], refreshJobs ?? []);
+
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Workspaces' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Workspaces' }]} />
 
       <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
           <h4 className="fw-bold mb-0">Workspaces</h4>
           <p className="text-muted small mb-0">Group dashboards, reports, datasets, and connections into BI work areas</p>
         </div>
-        <button className="btn btn-primary" onClick={startCreate}>
+        {canManageWorkspaces && (
+          <button className="btn btn-primary" onClick={startCreate}>
           <i className="fa-solid fa-plus me-2"></i>New Workspace
-        </button>
+          </button>
+        )}
+      </div>
+
+      <div className="card border-0 shadow-sm mb-3">
+        <div className="card-body py-3">
+          <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+            <div className="min-width-0">
+              <div className="text-uppercase fw-semibold small text-muted" style={{ letterSpacing: '0.08em' }}>Workspace hub</div>
+              <div className="fw-semibold">Use workspaces as the entry point to governed reports, dashboards, and datasets.</div>
+              <div className="text-muted small">Each workspace should be a live container, not a dead-end card.</div>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <Link to="/catalog" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-chart-bar me-1"></i>
+                Reports
+              </Link>
+              <Link to="/dashboards" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-gauge-high me-1"></i>
+                Dashboards
+              </Link>
+              <Link to="/datasets" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-cubes me-1"></i>
+                Datasets
+              </Link>
+              <Link to="/connections" className="btn btn-outline-secondary btn-sm">
+                <i className="fa-solid fa-server me-1"></i>
+                Connections
+              </Link>
+              <Link to="/enterprise" className="btn btn-primary btn-sm">
+                <i className="fa-solid fa-compass-drafting me-1"></i>
+                Governance
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="row g-3 mb-4">
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Enterprise signals</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.failedJobs.length}</div>
+              <div className="text-muted small">failed refresh jobs</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Ontology terms</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.ontology.termCount}</div>
+              <div className="text-muted small">shared vocabulary entries</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Featured reports</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.featuredReports.length}</div>
+              <div className="text-muted small">promotable to leaders</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Workspaces</div>
+              <div className="fs-4 fw-bold">{workspaces?.length ?? 0}</div>
+              <div className="text-muted small">active BI work areas</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="card border-0 shadow-sm mb-3">
@@ -196,7 +301,7 @@ export function WorkspacesPage() {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && canManageWorkspaces && (
         <div className="card border-0 shadow-sm mb-3">
           <div className="card-header bg-white d-flex align-items-center justify-content-between">
             <h6 className="fw-bold mb-0">{form.id ? 'Edit Workspace' : 'New Workspace'}</h6>
@@ -302,7 +407,7 @@ export function WorkspacesPage() {
           {filtered.map(workspace => (
             <div className="col-12 col-xl-6" key={workspace.id}>
               <div className="card border-0 shadow-sm h-100">
-                <div className="card-body">
+                <Link to={`/workspaces/${workspace.id}`} className="card-body text-decoration-none text-reset d-block">
                   <div className="d-flex align-items-start gap-3">
                     <div
                       className="rounded d-flex align-items-center justify-content-center text-white flex-shrink-0"
@@ -314,6 +419,7 @@ export function WorkspacesPage() {
                       <div className="d-flex align-items-center gap-2 flex-wrap">
                         <h5 className="fw-bold mb-0 text-truncate">{workspace.name}</h5>
                         {workspace.isDefault && <span className="badge bg-primary">Default</span>}
+                        {workspace.slug.toLowerCase().startsWith('demo-') && <span className="badge bg-success">Demo pack</span>}
                         <span className="badge bg-light text-dark border">{workspace.visibility}</span>
                       </div>
                       <div className="text-muted small mb-2">/{workspace.slug}</div>
@@ -326,9 +432,13 @@ export function WorkspacesPage() {
                         <span><i className="fa-solid fa-users text-muted me-1"></i>{workspace.memberCount ?? 0} members</span>
                         <span><i className="fa-solid fa-calendar text-muted me-1"></i>{new Date(workspace.createdAt).toLocaleDateString()}</span>
                       </div>
+                      <div className="d-flex align-items-center gap-2 mt-3">
+                        <span className="badge text-bg-primary">Open workspace</span>
+                        <span className="text-muted small">See reports, dashboards, members, and signals</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Link>
                 <div className="card-footer bg-white border-top d-flex align-items-center justify-content-between">
                   <div className="d-flex gap-2">
                     <Link to={`/catalog?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
@@ -340,18 +450,24 @@ export function WorkspacesPage() {
                     <Link to={`/dashboards?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
                       <i className="fa-solid fa-gauge-high me-1"></i>Dashboards
                     </Link>
-                    <Link to={`/reports/new?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
-                      <i className="fa-solid fa-plus me-1"></i>Report
-                    </Link>
-                    <Link to={`/connections/new?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
-                      <i className="fa-solid fa-plug me-1"></i>Connection
-                    </Link>
+                    {canManageWorkspaces && (
+                      <>
+                        <Link to={`/reports/new?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
+                          <i className="fa-solid fa-plus me-1"></i>Report
+                        </Link>
+                        <Link to={`/connections/new?workspaceId=${workspace.id}`} className="btn btn-outline-secondary btn-sm">
+                          <i className="fa-solid fa-plug me-1"></i>Connection
+                        </Link>
+                      </>
+                    )}
                   </div>
                   <div className="d-flex gap-1">
-                    <button className="btn btn-outline-secondary btn-sm" onClick={() => setMemberWorkspace(workspace)} title="Members">
+                    {canManageWorkspaces && (
+                      <button className="btn btn-outline-secondary btn-sm" onClick={() => setMemberWorkspace(workspace)} title="Members">
                       <i className="fa-solid fa-users"></i>
-                    </button>
-                    {!workspace.isDefault && (
+                      </button>
+                    )}
+                    {canManageWorkspaces && !workspace.isDefault && (
                       <button
                         className="btn btn-outline-secondary btn-sm"
                         onClick={() => defaultMutation.mutate(workspace.id)}
@@ -361,12 +477,16 @@ export function WorkspacesPage() {
                         <i className="fa-solid fa-star"></i>
                       </button>
                     )}
-                    <button className="btn btn-outline-secondary btn-sm" onClick={() => startEdit(workspace)} title="Edit">
-                      <i className="fa-solid fa-pen"></i>
-                    </button>
-                    <button className="btn btn-outline-danger btn-sm" onClick={() => setArchiveId(workspace.id)} title="Archive">
-                      <i className="fa-solid fa-box-archive"></i>
-                    </button>
+                    {canManageWorkspaces && (
+                      <>
+                        <button className="btn btn-outline-secondary btn-sm" onClick={() => startEdit(workspace)} title="Edit">
+                          <i className="fa-solid fa-pen"></i>
+                        </button>
+                        <button className="btn btn-outline-danger btn-sm" onClick={() => setArchiveId(workspace.id)} title="Archive">
+                          <i className="fa-solid fa-box-archive"></i>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,7 +495,7 @@ export function WorkspacesPage() {
         </div>
       )}
 
-      {archiveId && (
+      {archiveId && canManageWorkspaces && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-sm">
             <div className="modal-content border-0 shadow-lg">
@@ -397,7 +517,7 @@ export function WorkspacesPage() {
         </div>
       )}
 
-      {memberWorkspace && (
+      {memberWorkspace && canManageWorkspaces && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content border-0 shadow-lg">

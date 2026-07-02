@@ -5,7 +5,7 @@ import type { AuditLog } from '../../lib/api/types';
 import { useToast, Breadcrumb } from '../../components/common';
 
 const BREADCRUMBS = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Home', path: '/' },
   { label: 'Admin' },
   { label: 'Audit Log' },
 ];

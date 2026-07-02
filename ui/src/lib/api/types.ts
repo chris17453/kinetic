@@ -258,7 +258,19 @@ export interface DashboardWidget {
   config: Record<string, unknown>;
 }
 
-export type DashboardWidgetType = 'ReportVisual' | 'Kpi' | 'Text' | 'Image' | 'Embed';
+export type DashboardWidgetType =
+  | 'ReportVisual'
+  | 'Radar'
+  | 'Funnel'
+  | 'Heatmap'
+  | 'Waterfall'
+  | 'Kpi'
+  | 'Text'
+  | 'EnterpriseInsights'
+  | 'EnterpriseSignals'
+  | 'OntologyGlossary'
+  | 'Image'
+  | 'Embed';
 
 export interface DashboardFilter {
   id: string;

@@ -65,6 +65,17 @@ launch: dbs wait-dbs migrate
 	@printf "Launching Kinetic API at %s and UI at %s\n" "$(API_URL)" "$(UI_URL)"
 	trap 'jobs -pr | xargs -r kill' INT TERM EXIT
 	$(API_ENV) dotnet run --project "$(API_PROJECT)" --no-launch-profile &
+	for attempt in {1..60}; do \
+		if curl -fsS "$(API_URL)/health" >/dev/null 2>&1; then \
+			break; \
+		fi; \
+		if [[ "$$attempt" == "60" ]]; then \
+			printf "API did not become healthy at %s/health\n" "$(API_URL)"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	$(MAKE) dev-user
 	cd "$(UI_DIR)"
 	npm run dev -- --host 0.0.0.0 --port "$(UI_PORT)" --strictPort &
 	wait
@@ -133,6 +144,7 @@ dev-user:
 		printf "Could not create dev user. HTTP %s\n%s\n" "$$status" "$$body"
 		exit 1
 	fi
+	API_URL="$(API_URL)" DEV_USER_EMAIL="$(DEV_USER_EMAIL)" DEV_USER_PASSWORD="$(DEV_USER_PASSWORD)" node scripts/seed-demo-workspace.mjs
 
 install:
 	cd "$(UI_DIR)"

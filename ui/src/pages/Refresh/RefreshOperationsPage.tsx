@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api/client';
 import type { RefreshJob, RefreshJobStatus, RefreshSchedule, RefreshTargetType } from '../../lib/api/types';
 import { Breadcrumb, useToast } from '../../components/common';
+import { buildEnterpriseSummary } from '../../lib/enterprise/enterpriseSummary';
 
 const targetTypes: Array<'' | RefreshTargetType> = ['', 'Dataset', 'Report', 'Dashboard'];
 const jobStatuses: Array<'' | RefreshJobStatus> = ['', 'Queued', 'Running', 'Succeeded', 'Failed', 'Cancelled'];
@@ -51,10 +53,11 @@ export function RefreshOperationsPage() {
   const schedules = schedulesQuery.data?.items ?? [];
   const failedJobs = jobs.filter(job => job.status === 'Failed');
   const statusCounts = useMemo(() => countByStatus(jobs), [jobs]);
+  const enterpriseSummary = buildEnterpriseSummary([], [], jobs);
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Refresh Operations' }]} />
+      <Breadcrumb crumbs={[{ label: 'Home', path: '/' }, { label: 'Refresh Operations' }]} />
 
       <div className="d-flex align-items-start justify-content-between gap-3 mb-4">
         <div>
@@ -76,6 +79,38 @@ export function RefreshOperationsPage() {
         <Metric label="Running" value={statusCounts.Running} tone="info" />
         <Metric label="Succeeded" value={statusCounts.Succeeded} tone="success" />
         <Metric label="Failed" value={statusCounts.Failed} tone="danger" />
+      </div>
+
+      <div className="row g-3 mb-4">
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Enterprise signals</div>
+              <div className="fs-4 fw-bold">{enterpriseSummary.signals.failedJobs.length}</div>
+              <div className="text-muted small">failed jobs tracked in governance</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Signals hub</div>
+              <div className="fw-semibold">Operational visibility</div>
+              <div className="text-muted small">
+                <Link to="/enterprise" className="text-decoration-none">Open enterprise center</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small text-uppercase fw-semibold">Workload</div>
+              <div className="fs-4 fw-bold">{jobs.length + schedules.length}</div>
+              <div className="text-muted small">jobs and schedules in view</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {failedJobs.length > 0 && (

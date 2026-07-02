@@ -10,5 +10,6 @@ public record EntraSyncResult
     public int GroupsAdded { get; init; }
     public int GroupsUpdated { get; init; }
     public int GroupsRemoved { get; init; }
+    public int MembersUpdated { get; init; }
     public int MembershipsUpdated { get; init; }
 }

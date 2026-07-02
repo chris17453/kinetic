@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Kinetic.Api\Kinetic.Api.csproj" />
     <ProjectReference Include="..\..\src\Kinetic.Core\Kinetic.Core.csproj" />
     <ProjectReference Include="..\..\src\Kinetic.Data\Kinetic.Data.csproj" />
+    <ProjectReference Include="..\..\src\Kinetic.Worker\Kinetic.Worker.csproj" />
   </ItemGroup>
 
   <ItemGroup>
